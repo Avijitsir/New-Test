@@ -1,4 +1,4 @@
-// Firebase Config
+// Firebase Config (আপনার দেওয়া কনফিগ)
 const firebaseConfig = {
     apiKey: "AIzaSyDwGzTPmFg-gjoYtNWNJM47p22NfBugYFA",
     authDomain: "mock-test-1eea6.firebaseapp.com",
@@ -9,16 +9,46 @@ const firebaseConfig = {
     appId: "1:111849173136:web:8b211f58d854119e88a815",
     measurementId: "G-5RLWPTP8YD"
 };
+
+// Firebase Init
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const database = firebase.database();
-const storage = firebase.storage();
+// const storage = firebase.storage(); // স্টোরেজ আর লাগবে না, তাই বন্ধ রাখা হলো
+
+// --- ImgBB সেটআপ (অটোমেটিক ছবি আপলোডের জন্য) ---
+const imgbbAPIKey = "428ce2fdbf8965490f82d9b0b2f09a97";
 
 let currentQuestions = [];
 let editingQuizId = null;
 let editQIndex = -1;
 let allQuizzes = [];
-let viewingQuizId = null; // For CSV Export
+let viewingQuizId = null;
 let viewingQuizTitle = "";
+
+// --- ImgBB আপলোড ফাংশন ---
+async function uploadToImgBB(file) {
+    if (!file) return null;
+    const formData = new FormData();
+    formData.append("image", file);
+
+    try {
+        const response = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbAPIKey}`, {
+            method: "POST",
+            body: formData
+        });
+        const data = await response.json();
+        if (data.success) {
+            return data.data.url; // ছবির লিঙ্ক ফেরত দেবে
+        } else {
+            alert("ছবি আপলোড ব্যর্থ হয়েছে! ImgBB সার্ভারে সমস্যা।");
+            return null;
+        }
+    } catch (error) {
+        console.error("ImgBB Error:", error);
+        alert("ইন্টারনেট সংযোগ চেক করুন।");
+        return null;
+    }
+}
 
 // Navigation & Init
 function showDashboard() {
@@ -54,12 +84,6 @@ function insertMath(latex) {
 }
 
 function formatText(cmd) { document.execCommand(cmd, false, null); }
-
-async function uploadFile(file) {
-    if (!file) return null;
-    const ref = storage.ref(`imgs/${Date.now()}_${file.name}`);
-    await ref.put(file); return await ref.getDownloadURL();
-}
 
 // Load List
 function loadQuizList() {
@@ -125,6 +149,7 @@ function deleteQuiz(id) {
 document.getElementById('add-question-btn').addEventListener('click', () => saveQuestionData(-1));
 document.getElementById('update-question-btn').addEventListener('click', () => saveQuestionData(editQIndex));
 
+// --- প্রশ্ন সেভ করার লজিক (ImgBB ইন্টিগ্রেশন সহ) ---
 async function saveQuestionData(idx) {
     const qText = document.getElementById('rich-q-text').innerHTML;
     const passage = document.getElementById('passage-input').value;
@@ -136,16 +161,24 @@ async function saveQuestionData(idx) {
         return;
     }
 
-    btn.disabled = true; btn.innerText = "অপেক্ষা করুন...";
+    btn.disabled = true; 
+    btn.innerText = "ছবি আপলোড হচ্ছে..."; // ব্যবহারকারীকে জানানো
+
     try {
-        const qImg = document.getElementById('q-img-input').files[0] ? await uploadFile(document.getElementById('q-img-input').files[0]) : (idx>=0?currentQuestions[idx].qImg:null);
-        const expImg = document.getElementById('expl-img').files[0] ? await uploadFile(document.getElementById('expl-img').files[0]) : (idx>=0?currentQuestions[idx].expImg:null);
+        // ফাইল ইনপুট থেকে ফাইল নেওয়া
+        const qFile = document.getElementById('q-img-input').files[0];
+        const eFile = document.getElementById('expl-img').files[0];
+
+        // ImgBB-তে আপলোড করা (যদি নতুন ফাইল থাকে)
+        // যদি ফাইল না থাকে, আগের লিঙ্কটিই থেকে যাবে
+        const qImgUrl = qFile ? await uploadToImgBB(qFile) : (idx >= 0 ? currentQuestions[idx].qImg : null);
+        const expImgUrl = eFile ? await uploadToImgBB(eFile) : (idx >= 0 ? currentQuestions[idx].expImg : null);
 
         const newQ = {
             subject: document.getElementById('question-subject-select').value,
             passage: passage, 
             question: qText, 
-            qImg: qImg,
+            qImg: qImgUrl, // লিঙ্ক সেভ হবে
             options: [
                 document.getElementById('o1').value, 
                 document.getElementById('o2').value, 
@@ -155,7 +188,7 @@ async function saveQuestionData(idx) {
             optImgs: [null,null,null,null],
             correctIndex: parseInt(document.getElementById('c-opt').value),
             explanation: document.getElementById('expl-input').value,
-            expImg: expImg
+            expImg: expImgUrl // লিঙ্ক সেভ হবে
         };
 
         if (idx === -1) {
@@ -176,7 +209,7 @@ async function saveQuestionData(idx) {
     }
 }
 
-// --- UPDATED BULK IMPORT (With Explanation Support) ---
+// --- BULK IMPORT (As provided) ---
 document.getElementById('process-bulk-btn').addEventListener('click', () => {
     const txt = document.getElementById('bulk-input-textarea').value.trim();
     if(!txt) return;
@@ -217,9 +250,9 @@ document.getElementById('process-bulk-btn').addEventListener('click', () => {
     if(count) { 
         renderQuestions(); 
         document.getElementById('bulk-input-textarea').value = ''; 
-        alert(count + " টি প্রশ্ন ব্যাখ্যাসহ যুক্ত হয়েছে!"); 
+        alert(count + " টি প্রশ্ন ব্যাখ্যাসহ যুক্ত হয়েছে!"); 
     } else {
-        alert("ফরম্যাট সঠিক নয়! প্রশ্ন যোগ করা যায়নি।");
+        alert("ফরম্যাট সঠিক নয়! প্রশ্ন যোগ করা যায়নি।");
     }
 });
 
@@ -237,7 +270,9 @@ function renderQuestions() {
             </div>
             <div style="font-weight:600;">${q.question}</div>
             <div style="font-size:0.85rem; color:#636e72; margin-top:5px;">Correct: ${q.options[q.correctIndex]}</div>
-            ${q.explanation ? `<div style="font-size:0.8rem; color:#0984e3; margin-top:3px;">💡 ${q.explanation.substring(0,50)}...</div>` : ''}
+            <div style="font-size:0.8rem; color:#0984e3; margin-top:3px;">
+                ${q.qImg ? '🖼️ প্রশ্নের ছবি আছে' : ''} ${q.expImg ? '| 🖼️ ব্যাখ্যার ছবি আছে' : ''}
+            </div>
         `;
         div.addEventListener('dragstart', handleDragStart); 
         div.addEventListener('dragover', handleDragOver); 
@@ -303,7 +338,7 @@ function saveQuizData() {
         randomizeOptions: document.getElementById('rand-option-check').checked,
         questions: currentQuestions
     }).then(() => { 
-        alert("কুইজ সেভ হয়েছে!"); 
+        alert("কুইজ সেভ হয়েছে!"); 
         // Generates link for exam.html
         const link = window.location.href.replace('quiz-maker.html', 'exam.html').split('?')[0] + '?id=' + id; 
         document.getElementById('generated-link').value = link; 
@@ -313,7 +348,7 @@ function saveQuizData() {
 function copyLink() { 
     document.getElementById('generated-link').select(); 
     document.execCommand('copy'); 
-    alert("লিংক কপি হয়েছে!");
+    alert("লিংক কপি হয়েছে!");
 }
 
 // --- RESULTS & EXCEL EXPORT ---
