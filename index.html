@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Utkarsh Exam Portal</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    
+    <style>
+        :root { --primary: #00b0ff; --bg: #f2f4f8; }
+
+        /* --- PULL-TO-REFRESH BLOCKER (NEW) --- */
+        html, body {
+            overscroll-behavior-y: contain; /* Prevents pull-to-refresh */
+            height: 100%;
+            overflow-x: hidden;
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: var(--bg); 
+            margin: 0; 
+            padding-bottom: 50px; 
+            color: #1e293b; 
+            user-select: none; 
+            -webkit-tap-highlight-color: transparent; 
+        }
+        
+        /* Header */
+        header { background: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); position: sticky; top: 0; z-index: 1000; }
+        .logo-text { font-weight: 800; font-size: 1.2rem; color: #4361ee; }
+
+        /* Grid */
+        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 20px; }
+        .box { background: white; padding: 20px; border-radius: 16px; text-align: center; cursor: pointer; display: flex; flex-direction: column; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid white; transition: 0.1s; position: relative; }
+        .box:active { transform: scale(0.96); background: #f0f9ff; }
+        .box img { width: 50px; height: 50px; margin-bottom: 10px; border-radius: 10px; }
+        .box-title { font-weight: 700; font-size: 0.95rem; }
+        
+        /* Lock Icon Overlay */
+        .lock-icon { position: absolute; top: 10px; right: 10px; color: #ff4757; font-size: 1rem; display: none; }
+        .box.locked .lock-icon { display: block; }
+        .box.locked { opacity: 0.7; }
+
+        /* FULL SCREEN PAGE */
+        .sheet { 
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+            background: #f8f9fa; z-index: 99999; 
+            display: flex; flex-direction: column; 
+            transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .sheet.active { transform: translateX(0); }
+        
+        /* Sheet Header */
+        .sheet-header { background: white; padding: 12px 15px; display: flex; align-items: center; gap: 15px; border-bottom: 1px solid #eee; }
+        .back-btn { font-size: 1.2rem; cursor: pointer; padding: 5px; }
+        
+        /* Tabs & Menus */
+        .top-tabs { display: flex; gap: 10px; padding: 15px 20px 5px 20px; background: white; }
+        .pill-btn { padding: 6px 16px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; cursor: pointer; border: 1px solid #eee; color: #64748b; }
+        .pill-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+        .tabs-wrapper { background: white; padding-bottom: 0px; box-shadow: 0 4px 5px rgba(0,0,0,0.02); }
+        .tabs { display: flex; gap: 20px; overflow-x: auto; padding: 10px 20px 0 20px; scrollbar-width: none; border-bottom: 1px solid #f0f0f0; }
+        .tab-link { font-size: 0.9rem; font-weight: 600; color: #64748b; white-space: nowrap; cursor: pointer; padding-bottom: 10px; border-bottom: 3px solid transparent; }
+        .tab-link.active { color: var(--primary); border-bottom-color: var(--primary); }
+        
+        .sub-filters { display: flex; gap: 8px; overflow-x: auto; padding: 15px 20px 5px 20px; scrollbar-width: none; display: none; }
+        .chip { background: white; padding: 5px 12px; border-radius: 6px; font-size: 0.8rem; color: #555; border: 1px solid #ddd; cursor: pointer; white-space: nowrap; }
+        .chip.active { background: #333; color: white; border-color: #333; }
+
+        /* List */
+        .list { overflow-y: auto; flex-grow: 1; padding: 15px 20px 80px 20px; overscroll-behavior: contain; }
+        .test-card { background: white; padding: 15px; border-radius: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
+        .card-title { font-weight: 700; font-size: 0.95rem; }
+        .start-btn { background: var(--primary); color: white; border: none; padding: 8px 15px; border-radius: 5px; font-weight: bold; cursor: pointer; text-decoration: none; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+
+<header>
+    <span class="logo-text">Exam Portal</span>
+    <i class="fas fa-expand" onclick="toggleFullScreen()" style="color:#333; cursor:pointer;"></i>
+</header>
+
+<div class="grid" id="examGrid">
+    <div style="grid-column:span 2; text-align:center; margin-top:50px; color:#888;">লোডিং হচ্ছে...</div>
+</div>
+
+<div class="sheet" id="sheet">
+    <div class="sheet-header">
+        <i class="fas fa-arrow-left back-btn" onclick="goBack()"></i>
+        <span style="font-weight:bold; font-size:1.1rem; flex-grow:1;" id="sheetTitle">Exam Name</span>
+    </div>
+    <div class="top-tabs" id="topTabsContainer"></div>
+    <div class="tabs-wrapper">
+        <div class="tabs" id="mainMenuContainer"></div>
+    </div>
+    <div class="sub-filters" id="subFilterContainer"></div>
+    <div class="list" id="listContainer"></div>
+</div>
+
+<script>
+    // ==========================================
+    //  🚀 RE-TRIGGER FULL SCREEN LOGIC
+    // ==========================================
+    function triggerFullScreen() {
+        const elem = document.documentElement;
+        if (!document.fullscreenElement) {
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen().catch(() => {});
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen();
+            }
+        }
+    }
+
+    function toggleFullScreen() {
+        if (!document.fullscreenElement) triggerFullScreen();
+        else if (document.exitFullscreen) document.exitFullscreen();
+    }
+
+    // Force Fullscreen on ANY click
+    document.addEventListener('click', function() {
+        if (!document.fullscreenElement) {
+            triggerFullScreen();
+        }
+    });
+
+    // ==========================================
+    //  Firebase & App Logic
+    // ==========================================
+    const firebaseConfig = {
+        apiKey: "AIzaSyDwGzTPmFg-gjoYtNWNJM47p22NfBugYFA",
+        authDomain: "mock-test-1eea6.firebaseapp.com",
+        databaseURL: "https://mock-test-1eea6-default-rtdb.firebaseio.com",
+        projectId: "mock-test-1eea6",
+        storageBucket: "mock-test-1eea6.firebaseapp.com",
+        messagingSenderId: "111849173136",
+        appId: "1:111849173136:web:8b211f58d854119e88a815",
+        measurementId: "G-5RLWPTP8YD"
+    };
+
+    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+    const db = firebase.database();
+    let allData = [];
+
+    // Load Data
+    db.ref('exams').on('value', (snapshot) => {
+        const data = snapshot.val();
+        const grid = document.getElementById('examGrid');
+        grid.innerHTML = "";
+        if(!data) { grid.innerHTML = "<div style='text-align:center; width:100%; grid-column:span 2;'>কোনো ডেটা নেই</div>"; return; }
+        
+        allData = Object.values(data);
+        const uniqueExams = [...new Set(allData.map(item => item.category))];
+
+        uniqueExams.forEach(cat => {
+            const catItems = allData.filter(d => d.category === cat);
+            const isLocked = catItems.some(i => i.locked === true);
+            const item = catItems[0];
+            
+            let icon = item.icon || "https://cdn-icons-png.flaticon.com/512/2995/2995620.png";
+            let lockedClass = isLocked ? "locked" : "";
+            
+            grid.innerHTML += `
+                <div class="box ${lockedClass}" onclick="handleBoxClick('${cat}')">
+                    <img src="${icon}">
+                    <div class="box-title">${cat}</div>
+                    <i class="fas fa-lock lock-icon"></i>
+                </div>`;
+        });
+    });
+
+    // --- CLICK HANDLER ---
+    function handleBoxClick(cat) {
+        triggerFullScreen();
+        
+        const catItems = allData.filter(d => d.category === cat);
+        const isLocked = catItems.some(i => i.locked === true);
+
+        if(isLocked) {
+            alert("🔒 এই ফোল্ডারটি বর্তমানে অ্যাডমিন দ্বারা লক করা আছে।");
+            return;
+        }
+        
+        openSheet(cat);
+        window.history.pushState({page: "sheet"}, "", "#"+cat);
+    }
+
+    // --- NAVIGATION ---
+    let currentExam = "", currentTopTab = "", currentMenu = "";
+
+    function openSheet(cat) {
+        currentExam = cat;
+        document.getElementById('sheetTitle').innerText = cat;
+        document.getElementById('sheet').classList.add('active');
+        
+        const examData = allData.filter(d => d.category === cat);
+        const topTabs = [...new Set(examData.map(d => d.topTab || "Mock Tests"))]; 
+        
+        const topCont = document.getElementById('topTabsContainer');
+        topCont.innerHTML = "";
+        
+        topTabs.forEach((tab, idx) => {
+            topCont.innerHTML += `<div class="pill-btn ${idx===0?'active':''}" onclick="selectTopTab('${tab}', this)">${tab}</div>`;
+        });
+
+        if(topTabs.length > 0) selectTopTab(topTabs[0], document.querySelector('.pill-btn'));
+    }
+
+    function selectTopTab(tab, el) {
+        currentTopTab = tab;
+        document.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('active'));
+        if(el) el.classList.add('active');
+
+        const filtered = allData.filter(d => d.category === currentExam && (d.topTab || "Mock Tests") === tab);
+        const menus = [...new Set(filtered.map(d => d.subject))];
+
+        const menuCont = document.getElementById('mainMenuContainer');
+        menuCont.innerHTML = "";
+        
+        menus.forEach((m, idx) => {
+            menuCont.innerHTML += `<div class="tab-link ${idx===0?'active':''}" onclick="selectMenu('${m}', this)">${m}</div>`;
+        });
+
+        if(menus.length > 0) selectMenu(menus[0], document.querySelector('.tab-link'));
+        else document.getElementById('listContainer').innerHTML = "<div style='text-align:center; margin-top:20px;'>No Content</div>";
+    }
+
+    function selectMenu(menu, el) {
+        currentMenu = menu;
+        document.querySelectorAll('.tab-link').forEach(b => b.classList.remove('active'));
+        if(el) el.classList.add('active');
+
+        const filtered = allData.filter(d => d.category === currentExam && (d.topTab || "Mock Tests") === currentTopTab && d.subject === menu);
+        const subFilters = [...new Set(filtered.map(d => d.subFilter).filter(s => s))];
+        const subCont = document.getElementById('subFilterContainer');
+        subCont.innerHTML = "";
+
+        if (subFilters.length > 0) {
+            subCont.style.display = 'flex';
+            subCont.innerHTML = `<div class="chip active" onclick="selectSub('ALL', this)">All</div>`;
+            subFilters.forEach(sub => {
+                subCont.innerHTML += `<div class="chip" onclick="selectSub('${sub}', this)">${sub}</div>`;
+            });
+            selectSub('ALL', document.querySelector('.chip'));
+        } else {
+            subCont.style.display = 'none';
+            renderList(filtered);
+        }
+    }
+
+    function selectSub(sub, el) {
+        document.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
+        if(el) el.classList.add('active');
+        let filtered = allData.filter(d => d.category === currentExam && (d.topTab || "Mock Tests") === currentTopTab && d.subject === currentMenu);
+        if (sub !== 'ALL') filtered = filtered.filter(d => d.subFilter === sub);
+        renderList(filtered);
+    }
+
+    function renderList(items) {
+        const list = document.getElementById('listContainer');
+        list.innerHTML = "";
+        items.forEach(item => {
+            list.innerHTML += `
+                <div class="test-card">
+                    <div>
+                        <div class="card-title">${item.chapter}</div>
+                        <div style="font-size:0.8rem; color:#666;">${item.subject}</div>
+                    </div>
+                    <a href="${item.link}" class="start-btn">Start</a>
+                </div>
+            `;
+        });
+    }
+
+    // --- HANDLE BACK BUTTON ---
+    history.pushState(null, document.title, location.href);
+    window.addEventListener('popstate', function (event) {
+        if(document.getElementById('sheet').classList.contains('active')) {
+             document.getElementById('sheet').classList.remove('active');
+        } else {
+            history.pushState(null, document.title, location.href);
+        }
+    });
+
+    function goBack() {
+        document.getElementById('sheet').classList.remove('active');
+    }
+</script>
+
+</body>
+</html>
