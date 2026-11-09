@@ -57,18 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if(nIdx < filteredIndices.length - 1) loadResultQuestion(filteredIndices[nIdx + 1]);
     });
 
-    // --- FIX: Checkbox Listener for Validation & Fullscreen ---
-    document.getElementById('agreeCheck').addEventListener('change', function() {
-        const btn = document.getElementById('startTestBtn');
-        btn.disabled = !this.checked; // চেক না করলে বাটন ডিজেবল থাকবে
-        
-        // চেক বক্সে ক্লিক করলেই ফুলস্ক্রিন হবে (Introduction Fullscreen Fix)
-        if(this.checked && document.documentElement.requestFullscreen) {
-            document.documentElement.requestFullscreen().catch(err => {
-                console.log("Fullscreen blocked: User interaction required.");
-            });
-        }
-    });
+    // চেকবক্স তুলে দেওয়া হয়েছে: শুরুর বাটনে ক্লিক করলেই ফুলস্ক্রিন সহ পরীক্ষা শুরু হবে
 });
 
 let currentResRealIdx = -1; 
@@ -162,10 +151,7 @@ function loadQuizFromFirebase(quizId) {
             const instHTML = `
                 ${prevScoreMsg}
                 <div style="font-family: 'Roboto', sans-serif; font-size: 15px; line-height: 1.6; color:#333;">
-                    <h3 style="margin-top:0; color:#0d47a1;">পরীক্ষার্থীর নাম:</h3>
-                    <input type="text" id="stdName" placeholder="আপনার নাম লিখুন..." style="width:100%; padding:10px; margin-bottom:20px; border:1px solid #ccc; border-radius:4px;">
-                    
-                    <h3 style="margin-bottom:10px; color:#0d47a1;">সাধারণ নির্দেশাবলী (Instructions):</h3>
+                    <h3 style="margin-top:0; margin-bottom:10px; color:#0d47a1;">সাধারণ নির্দেশাবলী (Instructions):</h3>
                     <p>১. <strong>মোট সময় (Duration):</strong> ${data.duration} মিনিট</p>
                     <p>২. <strong>পাস মার্ক (Pass Mark):</strong> ${quizSettings.passMark}</p>
                     <p>৩. <strong>মার্কিং:</strong> প্রতিটি সঠিক উত্তরের জন্য <b>+${quizSettings.posMark}</b> এবং ভুল উত্তরের জন্য <b>-${quizSettings.negMark}</b> নম্বর কাটা যাবে</p>
@@ -187,7 +173,7 @@ function loadQuizFromFirebase(quizId) {
             
             // --- FIX: Button disabled logic logic fixed ---
             // বাটন ডিজেবল থাকবে যতক্ষণ না চেকবক্সে ক্লিক করা হয়
-            document.getElementById('startTestBtn').disabled = !document.getElementById('agreeCheck').checked;
+            document.getElementById('startTestBtn').disabled = false;
         } else {
             document.getElementById('instContent').innerHTML = "Quiz not found or invalid.";
         }
@@ -195,10 +181,6 @@ function loadQuizFromFirebase(quizId) {
 }
 
 document.getElementById('startTestBtn').addEventListener('click', () => {
-    const name = document.getElementById('stdName').value.trim();
-    if(!name) { alert("দয়া করে আপনার নাম লিখুন।"); return; }
-    localStorage.setItem('student_name', name);
-
     document.getElementById('instructionScreen').style.display = 'none';
     document.getElementById('quizMainArea').style.display = 'flex'; 
     if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
@@ -343,7 +325,7 @@ function submitTest() {
     
     const score = s.toFixed(2);
     
-    const stdName = document.getElementById('stdName').value || 'Anonymous';
+    const stdName = 'Anonymous'; // নাম নেওয়া হয় না
     if(currentQuizId) {
         database.ref('results/' + currentQuizId).push({
             name: stdName, score: score, correct: c, wrong: w, date: new Date().toLocaleString()
