@@ -89,12 +89,7 @@ function createNewQuiz() {
     editingQuizId = 'quiz_' + Date.now();
     currentQuestions = [];
     document.getElementById('quiz-title-input').value = '';
-    document.getElementById('quiz-duration').value = '';
-    document.getElementById('quiz-pass-mark').value = '';
-    document.getElementById('quiz-pos-mark').value = '';
-    document.getElementById('quiz-neg-mark').value = '';
-    document.getElementById('rand-question-check').checked = false;
-    document.getElementById('rand-option-check').checked = false;
+    applyLastSettings(); // সময়, পাস মার্ক, নম্বর, Shuffle: শেষবারের মান (না থাকলে ফাঁকা)
     clearInputs();
     document.getElementById('quiz-id-input').value = editingQuizId;
     document.getElementById('share-link-box').style.display = 'none';
@@ -382,6 +377,7 @@ function saveQuizData() {
         questions: currentQuestions
     }).then(() => { 
         markSaved();
+        saveLastSettings();
         showQuizLink(id);
         return publishToPortal(id, document.getElementById('quiz-title-input').value.trim());
     }).then(portalMsg => {
@@ -602,4 +598,30 @@ function pickPortalCombo(i) {
     pubSet('pub-cat', c.cat); pubSet('pub-tab', c.tab); pubSet('pub-menu', c.menu); pubSet('pub-sub', c.sub);
     refreshMenuList();
     markUnsaved();
+}
+
+
+// ---- কুইজ সেটিংস (Basic Info): শেষবার সফল সেভের মান নতুন কুইজে বসানো ----
+const LAST_SETTINGS_KEY = 'qm_last_settings';
+function saveLastSettings() {
+    try {
+        localStorage.setItem(LAST_SETTINGS_KEY, JSON.stringify({
+            duration: document.getElementById('quiz-duration').value,
+            passMark: document.getElementById('quiz-pass-mark').value,
+            posMark: document.getElementById('quiz-pos-mark').value,
+            negMark: document.getElementById('quiz-neg-mark').value,
+            randQ: document.getElementById('rand-question-check').checked,
+            randO: document.getElementById('rand-option-check').checked
+        }));
+    } catch (e) {}
+}
+function applyLastSettings() {
+    let d = {};
+    try { d = JSON.parse(localStorage.getItem(LAST_SETTINGS_KEY) || '{}'); } catch (e) {}
+    document.getElementById('quiz-duration').value = d.duration || '';
+    document.getElementById('quiz-pass-mark').value = d.passMark || '';
+    document.getElementById('quiz-pos-mark').value = d.posMark || '';
+    document.getElementById('quiz-neg-mark').value = d.negMark || '';
+    document.getElementById('rand-question-check').checked = !!d.randQ;
+    document.getElementById('rand-option-check').checked = !!d.randO;
 }
