@@ -102,6 +102,7 @@ function createNewQuiz() {
     document.getElementById('view-editor').style.display = 'block';
     renderQuestions();
     markSaved();
+    loadPortalOptions().then(() => prefillPublish(editingQuizId, true));
 }
 
 // Helper: Insert Math LaTeX Code
@@ -172,6 +173,7 @@ function editQuiz(id) {
         showQuizLink(id); // পুরনো কুইজের লিংকও সরাসরি কপি করা যাবে
         renderQuestions();
         markSaved();
+        loadPortalOptions().then(() => prefillPublish(id, false));
     });
 }
 
@@ -381,7 +383,9 @@ function saveQuizData() {
     }).then(() => { 
         markSaved();
         showQuizLink(id);
-        alert("কুইজ সেভ হয়েছে!");
+        return publishToPortal(id, document.getElementById('quiz-title-input').value.trim());
+    }).then(portalMsg => {
+        alert("কুইজ সেভ হয়েছে!" + (portalMsg || ""));
     }).catch(err => {
         alert("সেভ করা যায়নি! ইন্টারনেট চেক করে আবার চেষ্টা করুন।\n" + err.message);
     });
@@ -447,7 +451,7 @@ function exportToCSV() {
 
 
 // কুইজ সেটিংসের কোনো ঘর বদলালে "সেভ হয়নি" চিহ্ন দেখাবে
-['quiz-title-input','quiz-duration','quiz-pass-mark','quiz-pos-mark','quiz-neg-mark','rand-question-check','rand-option-check'].forEach(id => {
+['quiz-title-input','quiz-duration','quiz-pass-mark','quiz-pos-mark','quiz-neg-mark','rand-question-check','rand-option-check','pub-cat','pub-tab','pub-menu','pub-sub'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', markUnsaved);
 });
