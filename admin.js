@@ -455,3 +455,151 @@ function exportToCSV() {
     const el = document.getElementById(id);
     if (el) el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', markUnsaved);
 });
+
+
+// =====================================================
+// পোর্টালে স্বয়ংক্রিয় প্রকাশ (অ্যাডমিন প্যানেলের Single Entry-র শর্টকাট)
+// কুইজ সেভ করলেই 'exams' নোডে এন্ট্রি তৈরি/আপডেট হয়
+// =====================================================
+let portalExams = []; // [[key, value], ...]
+const PUB_LAST_KEY = 'qm_last_publish';
+
+function pubVal(id) { return (document.getElementById(id).value || '').trim(); }
+function pubSet(id, v) { document.getElementById(id).value = v || ''; }
+function escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;'); }
+
+// পোর্টালের বর্তমান এন্ট্রিগুলো এনে ড্রপডাউনের তালিকা বানায়
+function loadPortalOptions() {
+    return database.ref('exams').once('value').then(snap => {
+        portalExams = [];
+        snap.forEach(c => { portalExams.push([c.key, c.val() || {}]); });
+        const uniq = arr => [...new Set(arr.filter(Boolean))];
+        const fill = (id, arr) => {
+            document.getElementById(id).innerHTML = arr.map(v => '<option value="' + escAttr(v) + '">').join('');
+        };
+        fill('pub-catList', uniq(portalExams.map(([k, v]) => v.category)));
+        fill('pub-tabList', uniq(['Mock Tests'].concat(portalExams.map(([k, v]) => v.topTab))));
+        refreshMenuList();
+        renderPortalChips();
+    }).catch(err => { console.log('Portal options load failed:', err); });
+}
+
+// নির্বাচিত পরীক্ষার মেনুগুলোই সাজেস্ট করে (না থাকলে সব মেনু)
+function refreshMenuList() {
+    const cat = pubVal('pub-cat');
+    let src = portalExams.filter(([k, v]) => v.category === cat);
+    if (!src.length) src = portalExams;
+    const menus = [...new Set(src.map(([k, v]) => v.subject).filter(Boolean))];
+    document.getElementById('pub-menuList').innerHTML = menus.map(m => '<option value="' + escAttr(m) + '">').join('');
+}
+document.getElementById('pub-cat').addEventListener('input', refreshMenuList);
+
+// এডিটর খোলার সময় ঘরগুলো ভরে দেয়
+//  - আগে থেকে পোর্টালে থাকা কুইজ হলে: ওই এন্ট্রির তথ্য
+//  - একদম নতুন কুইজ হলে: শেষবার যা ব্যবহার করেছেন সেটাই
+function prefillPublish(quizId, isNew) {
+    const link = buildQuizLink(quizId);
+    const found = portalExams.find(([k, v]) => v.link === link);
+    pubSet('pub-key', found ? found[0] : '');
+    if (found) {
+        pubSet('pub-cat', found[1].category);
+        pubSet('pub-tab', found[1].topTab || 'Mock Tests');
+        pubSet('pub-menu', found[1].subject);
+        pubSet('pub-sub', found[1].subFilter);
+    } else if (isNew) {
+        let last = {};
+        try { last = JSON.parse(localStorage.getItem(PUB_LAST_KEY) || '{}'); } catch (e) {}
+        pubSet('pub-cat', last.cat);
+        pubSet('pub-tab', last.tab || 'Mock Tests');
+        pubSet('pub-menu', last.menu);
+        pubSet('pub-sub', last.sub);
+    } else {
+        pubSet('pub-cat', ''); pubSet('pub-tab', 'Mock Tests'); pubSet('pub-menu', ''); pubSet('pub-sub', '');
+    }
+    refreshMenuList();
+    markSaved(); // ঘর ভরাটকে "পরিবর্তন" হিসেবে ধরা হবে না
+}
+
+// কুইজ সেভ হওয়ার পর পোর্টালে এন্ট্রি করে। ফেরত দেয় একটি বার্তা (বা ফাঁকা লেখা)
+function publishToPortal(quizId, title) {
+    const cat = pubVal('pub-cat'), menu = pubVal('pub-menu');
+    if (!cat && !menu) return Promise.resolve('');
+    if (!cat || !menu) return Promise.resolve('\n\n⚠️ পোর্টালে যোগ হয়নি: "Exam" ও "Menu" দুটোই দিতে হবে।');
+    if (!title) return Promise.resolve('\n\n⚠️ পোর্টালে যোগ হয়নি: কুইজের নাম (Exam Title) দিন।');
+
+    const link = buildQuizLink(quizId);
+    // সবসময় সর্বশেষ তালিকা এনে মিলিয়ে নেয়, যাতে ডুপ্লিকেট এন্ট্রি না হয়
+    return loadPortalOptions().then(() => {
+        let key = pubVal('pub-key');
+        if (!key) { const f = portalExams.find(([k, v]) => v.link === link); if (f) key = f[0]; }
+        const existing = key ? portalExams.find(([k]) => k === key) : null;
+
+        // আইকন: একই পরীক্ষার আগের আইকন নিজে থেকে নেয়
+        let icon = '';
+        if (existing && existing[1].category === cat && existing[1].icon) icon = existing[1].icon;
+        if (!icon) { const f = portalExams.find(([k, v]) => v.category === cat && v.icon); if (f) icon = f[1].icon; }
+
+        const payload = {
+            category: cat,
+            icon: icon,
+            topTab: pubVal('pub-tab') || 'Mock Tests',
+            subject: menu,
+            subFilter: pubVal('pub-sub'),
+            chapter: title,
+            link: link,
+            locked: existing ? (existing[1].locked || false) : false
+        };
+
+        let op, newKey = key;
+        if (key) { op = database.ref('exams/' + key).update(payload); }
+        else { const ref = database.ref('exams').push(); newKey = ref.key; op = ref.set(payload); }
+
+        return op.then(() => {
+            pubSet('pub-key', newKey);
+            try { localStorage.setItem(PUB_LAST_KEY, JSON.stringify({ cat: cat, tab: payload.topTab, menu: menu, sub: payload.subFilter })); } catch (e) {}
+            loadPortalOptions();
+            return '\n\n🌐 পোর্টালেও ' + (key ? 'আপডেট' : 'যোগ') + ' হয়েছে।' + (icon ? '' : '\n(এই পরীক্ষার আইকন এখনো নেই, চাইলে অ্যাডমিন প্যানেল থেকে একবার দিন।)');
+        });
+    }).catch(err => '\n\n⚠️ কুইজ সেভ হয়েছে, কিন্তু পোর্টালে যোগ করা যায়নি: ' + err.message);
+}
+
+
+// ---- "পোর্টালে এখন যা আছে" তালিকা: ক্লিক করলে Exam/Tab/Menu/Sub ঘর ভরে যায় ----
+let pubCombos = [];
+function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+function renderPortalChips() {
+    const box = document.getElementById('pub-existing');
+    if (!box) return;
+    const map = new Map();
+    portalExams.forEach(([k, v]) => {
+        if (!v.category) return;
+        const tab = v.topTab || 'Mock Tests', menu = v.subject || '', sub = v.subFilter || '';
+        const key = [v.category, tab, menu, sub].join('||');
+        if (!map.has(key)) map.set(key, { cat: v.category, tab: tab, menu: menu, sub: sub, n: 0 });
+        map.get(key).n++;
+    });
+    pubCombos = [...map.values()].sort((a, b) =>
+        (a.cat + '|' + a.tab + '|' + a.menu + '|' + a.sub).localeCompare(b.cat + '|' + b.tab + '|' + b.menu + '|' + b.sub));
+    if (!pubCombos.length) {
+        box.innerHTML = '<span style="color:#636e72;">পোর্টালে এখনো কিছু নেই। ওপরের ঘরগুলোতে নিজে লিখুন।</span>';
+        return;
+    }
+    const groups = {};
+    pubCombos.forEach((c, i) => { (groups[c.cat] = groups[c.cat] || []).push([c, i]); });
+    box.innerHTML = Object.keys(groups).map(cat => {
+        const chips = groups[cat].map(([c, i]) => {
+            const label = [c.tab, c.menu, c.sub].filter(Boolean).join(' › ') + ' (' + c.n + 'টি)';
+            return '<button type="button" onclick="pickPortalCombo(' + i + ')" style="margin:3px 4px 3px 0; padding:5px 10px; border:1px solid #b2bec3; border-radius:16px; background:#f5f6fa; cursor:pointer; font-size:0.8rem;">' + escHtml(label) + '</button>';
+        }).join('');
+        return '<div style="margin-bottom:6px;"><strong style="color:#2d3436;">🏫 ' + escHtml(cat) + '</strong><br>' + chips + '</div>';
+    }).join('');
+}
+
+function pickPortalCombo(i) {
+    const c = pubCombos[i];
+    if (!c) return;
+    pubSet('pub-cat', c.cat); pubSet('pub-tab', c.tab); pubSet('pub-menu', c.menu); pubSet('pub-sub', c.sub);
+    refreshMenuList();
+    markUnsaved();
+}
