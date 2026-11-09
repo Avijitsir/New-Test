@@ -185,6 +185,29 @@
                     </div>
                 </div>
 
+                <div class="card card-settings" id="publish-card" style="border-top:4px solid #00b894;">
+                    <h3><span class="material-icons">public</span> পোর্টালে প্রকাশ (অ্যাডমিন প্যানেলে যেতে হবে না)</h3>
+                    <input type="hidden" id="pub-key">
+                    <div class="row-grid">
+                        <div><label>🏫 পরীক্ষা (Exam):</label>
+                            <input type="text" id="pub-cat" list="pub-catList" placeholder="যেমন: WBCS" autocomplete="off">
+                            <datalist id="pub-catList"></datalist></div>
+                        <div><label>🗂️ ট্যাব (Top Tab):</label>
+                            <input type="text" id="pub-tab" list="pub-tabList" placeholder="Mock Tests" autocomplete="off">
+                            <datalist id="pub-tabList"></datalist></div>
+                    </div>
+                    <div class="row-grid">
+                        <div><label>📋 মেনু (Menu):</label>
+                            <input type="text" id="pub-menu" list="pub-menuList" placeholder="যেমন: Full Test" autocomplete="off">
+                            <datalist id="pub-menuList"></datalist></div>
+                        <div><label>🔖 সাব-ফিল্টার (ঐচ্ছিক):</label>
+                            <input type="text" id="pub-sub" placeholder="যেমন: Class 7" autocomplete="off"></div>
+                    </div>
+                    <small style="display:block; margin-top:8px; color:#636e72;">
+                        "সেভ কুইজ" চাপলেই কুইজের নামে (চ্যাপ্টার নাম) পোর্টালে এন্ট্রি হয়ে যাবে। আগে এডিট করা কুইজ আবার সেভ করলে নতুন এন্ট্রি হবে না, আগেরটাই আপডেট হবে। Exam ও Menu ফাঁকা রাখলে শুধু কুইজ সেভ হবে।
+                    </small>
+                </div>
+
                 <div class="card card-question">
                     <h3><span class="material-icons">add_circle_outline</span> প্রশ্ন যোগ করুন (Input)</h3>
                     
