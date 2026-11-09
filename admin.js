@@ -24,6 +24,31 @@ let editQIndex = -1;
 let allQuizzes = [];
 let viewingQuizId = null;
 let viewingQuizTitle = "";
+let unsavedChanges = false; // সেভ না করা পরিবর্তন আছে কিনা
+
+// --- "সেভ হয়নি" চিহ্ন ও সতর্কতা ---
+function markUnsaved() {
+    unsavedChanges = true;
+    const b = document.getElementById('unsaved-badge');
+    if (b) b.style.display = 'inline-block';
+}
+function markSaved() {
+    unsavedChanges = false;
+    const b = document.getElementById('unsaved-badge');
+    if (b) b.style.display = 'none';
+}
+window.addEventListener('beforeunload', (e) => {
+    if (unsavedChanges) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// কুইজের শেয়ার লিংক তৈরি
+function buildQuizLink(id) {
+    return window.location.href.replace('quiz-maker.html', 'exam.html').split('?')[0] + '?id=' + id;
+}
+function showQuizLink(id) {
+    document.getElementById('generated-link').value = buildQuizLink(id);
+    document.getElementById('share-link-box').style.display = 'block';
+}
 
 // --- ImgBB আপলোড ফাংশন ---
 async function uploadToImgBB(file) {
@@ -52,6 +77,8 @@ async function uploadToImgBB(file) {
 
 // Navigation & Init
 function showDashboard() {
+    if (unsavedChanges && !confirm("⚠️ আপনার পরিবর্তনগুলো এখনো সেভ হয়নি!\nসেভ না করেই ড্যাশবোর্ডে ফিরে যেতে চান?")) return;
+    markSaved();
     document.getElementById('view-dashboard').style.display = 'block';
     document.getElementById('view-editor').style.display = 'none';
     document.getElementById('view-results').style.display = 'none';
@@ -70,9 +97,11 @@ function createNewQuiz() {
     document.getElementById('rand-option-check').checked = false;
     clearInputs();
     document.getElementById('quiz-id-input').value = editingQuizId;
+    document.getElementById('share-link-box').style.display = 'none';
     document.getElementById('view-dashboard').style.display = 'none';
     document.getElementById('view-editor').style.display = 'block';
     renderQuestions();
+    markSaved();
 }
 
 // Helper: Insert Math LaTeX Code
@@ -134,9 +163,15 @@ function editQuiz(id) {
         document.getElementById('rand-question-check').checked = d.randomizeQuestions || false;
         document.getElementById('rand-option-check').checked = d.randomizeOptions || false;
         currentQuestions = d.questions || [];
+        editQIndex = -1;
+        clearInputs();
+        document.getElementById('add-question-btn').style.display = 'block';
+        document.getElementById('update-question-btn').style.display = 'none';
         document.getElementById('view-dashboard').style.display = 'none';
         document.getElementById('view-editor').style.display = 'block';
+        showQuizLink(id); // পুরনো কুইজের লিংকও সরাসরি কপি করা যাবে
         renderQuestions();
+        markSaved();
     });
 }
 
@@ -201,6 +236,7 @@ async function saveQuestionData(idx) {
         }
         renderQuestions(); 
         clearInputs();
+        markUnsaved(); // প্রশ্ন যোগ/আপডেট হলো, কিন্তু কুইজ এখনো সেভ হয়নি
     } catch(e) { 
         alert("Error: " + e.message); 
     } finally { 
@@ -247,8 +283,9 @@ document.getElementById('process-bulk-btn').addEventListener('click', () => {
         }
     });
     
-    if(count) { 
-        renderQuestions(); 
+    if(count) {
+        renderQuestions();
+        markUnsaved();
         document.getElementById('bulk-input-textarea').value = ''; 
         alert(count + " টি প্রশ্ন ব্যাখ্যাসহ যুক্ত হয়েছে!"); 
     } else {
@@ -286,7 +323,7 @@ function renderQuestions() {
 let dragSrcEl = null;
 function handleDragStart(e) { dragSrcEl = this; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/html', this.innerHTML); this.classList.add('dragging'); }
 function handleDragOver(e) { if (e.preventDefault) e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; }
-function handleDrop(e) { if (e.stopPropagation) e.stopPropagation(); if (dragSrcEl !== this) { let fromIndex = parseInt(dragSrcEl.dataset.index); let toIndex = parseInt(this.dataset.index); let itemToMove = currentQuestions[fromIndex]; currentQuestions.splice(fromIndex, 1); currentQuestions.splice(toIndex, 0, itemToMove); renderQuestions(); } return false; }
+function handleDrop(e) { if (e.stopPropagation) e.stopPropagation(); if (dragSrcEl !== this) { let fromIndex = parseInt(dragSrcEl.dataset.index); let toIndex = parseInt(this.dataset.index); let itemToMove = currentQuestions[fromIndex]; currentQuestions.splice(fromIndex, 1); currentQuestions.splice(toIndex, 0, itemToMove); renderQuestions(); markUnsaved(); } return false; }
 
 function loadQForEdit(i) {
     const q = currentQuestions[i]; editQIndex = i;
@@ -296,7 +333,10 @@ function loadQForEdit(i) {
     document.getElementById('o2').value = q.options[1]; 
     document.getElementById('o3').value = q.options[2]; 
     document.getElementById('o4').value = q.options[3];
-    document.getElementById('c-opt').value = q.correctIndex; 
+    document.getElementById('c-opt').value = q.correctIndex;
+    // সাবজেক্টও ফিরিয়ে আনা হচ্ছে, না হলে আপডেটের সময় সাবজেক্ট নিজে থেকে বদলে যেত
+    const subjSel = document.getElementById('question-subject-select');
+    if (q.subject && Array.from(subjSel.options).some(o => o.value === q.subject)) subjSel.value = q.subject;
     document.getElementById('expl-input').value = q.explanation || '';
     document.getElementById('add-question-btn').style.display='none'; 
     document.getElementById('update-question-btn').style.display='block';
@@ -319,8 +359,9 @@ function clearInputs() {
 
 function delQ(i) { 
     if(confirm("এই প্রশ্নটি ডিলিট করবেন?")) {
-        currentQuestions.splice(i, 1); 
-        renderQuestions(); 
+        currentQuestions.splice(i, 1);
+        renderQuestions();
+        markUnsaved();
     }
 }
 
@@ -338,11 +379,11 @@ function saveQuizData() {
         randomizeOptions: document.getElementById('rand-option-check').checked,
         questions: currentQuestions
     }).then(() => { 
-        alert("কুইজ সেভ হয়েছে!"); 
-        // Generates link for exam.html
-        const link = window.location.href.replace('quiz-maker.html', 'exam.html').split('?')[0] + '?id=' + id; 
-        document.getElementById('generated-link').value = link; 
-        document.getElementById('share-link-box').style.display = 'block'; 
+        markSaved();
+        showQuizLink(id);
+        alert("কুইজ সেভ হয়েছে!");
+    }).catch(err => {
+        alert("সেভ করা যায়নি! ইন্টারনেট চেক করে আবার চেষ্টা করুন।\n" + err.message);
     });
 }
 function copyLink() { 
@@ -403,3 +444,10 @@ function exportToCSV() {
         if(btn) btn.innerText = oldText;
     });
 }
+
+
+// কুইজ সেটিংসের কোনো ঘর বদলালে "সেভ হয়নি" চিহ্ন দেখাবে
+['quiz-title-input','quiz-duration','quiz-pass-mark','quiz-pos-mark','quiz-neg-mark','rand-question-check','rand-option-check'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', markUnsaved);
+});
