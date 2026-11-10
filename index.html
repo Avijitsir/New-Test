@@ -270,11 +270,13 @@
 
         if (subFilters.length > 0) {
             subCont.style.display = 'flex';
-            subCont.innerHTML = `<div class="chip active" onclick="selectSub('ALL', this)">All</div>`;
+            // "All" বোতাম নেই: প্রথম সাব-ফিল্টারটাই নিজে থেকে খোলা থাকে
             subFilters.forEach(sub => {
                 subCont.innerHTML += `<div class="chip" onclick="selectSub('${sub}', this)">${sub}</div>`;
             });
-            selectSub('ALL', document.querySelector('.chip'));
+            // সাব-ফিল্টারহীন চ্যাপ্টার থাকলে সেগুলো হারিয়ে না যাওয়ার জন্য আলাদা বোতাম
+            if (filtered.some(d => !d.subFilter)) subCont.innerHTML += `<div class="chip" onclick="selectSub('__NONE__', this)">অন্যান্য</div>`;
+            selectSub(subFilters[0], document.querySelector('.chip'));
         } else {
             subCont.style.display = 'none';
             renderList(filtered);
@@ -285,7 +287,8 @@
         document.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
         if(el) el.classList.add('active');
         let filtered = orderedItems(allData.filter(d => d.category === currentExam && (d.topTab || "Mock Tests") === currentTopTab && d.subject === currentMenu));
-        if (sub !== 'ALL') filtered = filtered.filter(d => d.subFilter === sub);
+        if (sub === '__NONE__') filtered = filtered.filter(d => !d.subFilter);
+        else if (sub !== 'ALL') filtered = filtered.filter(d => d.subFilter === sub);
         renderList(filtered);
     }
 
