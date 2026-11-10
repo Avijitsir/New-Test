@@ -26,14 +26,26 @@
         .tab-btn.tab-arrange.active { background: #a55eea; }
 
         /* ARRANGE TAB */
-        .arr-block { background: #faf8ff; border: 1px solid #e6dcfb; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
-        .arr-block h4 { margin: 0 0 10px 0; color: #5f27cd; }
-        .arr-row { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 8px 10px; margin-top: 6px; }
-        .arr-num { min-width: 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 50%; background: #eef2ff; color: #4361ee; font-weight: bold; font-size: 0.8rem; }
-        .arr-name { flex: 1; font-weight: 600; word-break: break-word; }
+        .arr-bar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #fff; padding: 10px 4px; margin-bottom: 10px; border-bottom: 1px solid #eee; }
+        .arr-save { background: #00b894; color: #fff; border: none; padding: 10px 18px; border-radius: 8px; font-weight: bold; font-size: 0.95rem; cursor: pointer; }
+        .arr-cancel { background: #dfe6e9; color: #2d3436; border: none; padding: 10px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .arr-save:disabled, .arr-cancel:disabled { opacity: 0.4; cursor: default; }
+        .arr-badge { display: none; background: #e17055; color: #fff; font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 20px; }
+        .arr-mini { background: #f3edff; color: #5f27cd; border: 1px solid #d6c8f5; padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; font-weight: bold; }
+        .arr-list { display: flex; flex-direction: column; gap: 6px; }
+        .arr-node { background: #fff; border: 1px solid #e6dcfb; border-radius: 10px; }
+        .arr-node.lvl2 { border-color: #e3e8ff; }
+        .arr-node.lvl3 { border-color: #d8f3ec; }
+        .arr-node.lvl4 { border-color: #eee; border-radius: 8px; }
+        .arr-head { display: flex; align-items: center; gap: 8px; padding: 9px 10px; cursor: pointer; user-select: none; }
+        .arr-node.lvl1 > .arr-head { background: #faf8ff; border-radius: 10px; font-weight: 700; }
+        .arr-grip { touch-action: none; cursor: grab; font-size: 1.2rem; line-height: 1; padding: 4px 8px; border-radius: 6px; background: #f3edff; color: #5f27cd; border: none; }
+        .arr-grip:active { cursor: grabbing; }
+        .arr-name { flex: 1; word-break: break-word; }
         .arr-name small { color: #888; font-weight: normal; margin-left: 6px; }
-        .arr-btn { width: 38px; padding: 6px 0; border: 1px solid #d6c8f5; background: #f3edff; color: #5f27cd; border-radius: 6px; cursor: pointer; font-size: 0.95rem; }
-        .arr-btn:disabled { opacity: 0.3; cursor: default; }
+        .arr-caret { width: 16px; color: #888; font-size: 0.8rem; }
+        .arr-kids { padding: 4px 10px 10px 26px; }
+        .arr-dragging { opacity: 0.55; outline: 2px dashed #a55eea; }
         .arr-empty { color: #999; padding: 6px 2px; }
 
         .tab-content { display: none; animation: fadeIn 0.3s ease-in-out; }
@@ -265,35 +277,19 @@
 
     <div id="section-arrange" class="tab-content section-box" style="border-top: 5px solid #a55eea;">
         <div class="section-title">↕️ ক্রম সাজান (Arrange Order)</div>
-        <p style="margin-top:0; color:#636e72;">▲ ▼ চাপলে জিনিসটা ওপরে বা নিচে সরবে। প্রতিটা বদল সঙ্গে সঙ্গে সেভ হয় এবং পোর্টালে দেখা যায়, আলাদা সেভ বোতাম নেই। নতুন যোগ করা জিনিস সবার শেষে আসে।</p>
+        <p style="margin-top:0; color:#636e72;">নামের পাশের <b>⠿</b> ধরে টেনে জায়গা বদলান। পরীক্ষা, ট্যাব, মেনু ও চ্যাপ্টার, সবই এখানে। সাজানো শেষ হলে ওপরের <b>সেভ</b> চাপুন, তখনই পোর্টালে বদলাবে। নতুন যোগ করা জিনিস সবার শেষে আসে।</p>
 
-        <div class="arr-block">
-            <h4>🏫 ১. পরীক্ষার ক্রম (পোর্টালের হোমপেজ)</h4>
-            <div id="arr-exams"></div>
+        <div class="arr-bar">
+            <button class="arr-save" id="arr-save" onclick="saveArrange()" disabled>💾 সেভ করুন</button>
+            <button class="arr-cancel" id="arr-cancel" onclick="cancelArrange()" disabled>↩ বাতিল</button>
+            <span class="arr-badge" id="arr-badge">● সেভ হয়নি</span>
+            <span style="flex:1"></span>
+            <button class="arr-mini" onclick="arrToggleAll(true)">সব খুলুন</button>
+            <button class="arr-mini" onclick="arrToggleAll(false)">সব বন্ধ</button>
         </div>
 
-        <div class="arr-block">
-            <h4>🗂️ ২. ট্যাবের ক্রম</h4>
-            <select id="arr-exam-sel" onchange="renderArrange()"></select>
-            <div id="arr-tabs"></div>
-        </div>
-
-        <div class="arr-block">
-            <h4>📋 ৩. মেনুর ক্রম</h4>
-            <select id="arr-tab-sel" onchange="renderArrange()"></select>
-            <div id="arr-menus"></div>
-        </div>
-
-        <div class="arr-block">
-            <h4>🔖 ৪. সাব-ফিল্টার ও 📚 চ্যাপ্টারের ক্রম</h4>
-            <select id="arr-menu-sel" onchange="renderArrange()"></select>
-            <div style="margin-top:10px; font-weight:bold; color:#555;">সাব-ফিল্টার:</div>
-            <div id="arr-subs"></div>
-            <div style="margin-top:14px; font-weight:bold; color:#555;">চ্যাপ্টার (টেস্ট):</div>
-            <div id="arr-items"></div>
-        </div>
+        <div id="arr-tree"></div>
     </div>
-
 </div>
 
 <script>
@@ -613,91 +609,166 @@
             .map(o => o.it);
     }
 
-    const arrState = {}; // containerId -> { ids, save }
+    // ---- নতুন Arrange: একই পেজে সব স্তর, টেনে সাজানো, শেষে সেভ ----
+    let arrTree = [];            // [{name, tabs:[{name, menus:[{name, items:[{key,chapter,sub}]}]}]}]
+    let arrDirty = false;        // সেভ না করা বদল আছে কিনা
+    const arrOpen = new Set();   // কোন কোন অংশ খোলা
 
-    function arrRender(containerId, ids, labels, subs, saveFn) {
-        arrState[containerId] = { ids: ids, save: saveFn };
-        const box = document.getElementById(containerId);
-        if (!ids.length) { box.innerHTML = '<div class="arr-empty">এখানে কিছু নেই</div>'; return; }
-        box.innerHTML = ids.map((id, i) =>
-            '<div class="arr-row">' +
-              '<span class="arr-num">' + (i + 1) + '</span>' +
-              '<span class="arr-name">' + arrEsc(labels[i]) + (subs[i] ? '<small>' + arrEsc(subs[i]) + '</small>' : '') + '</span>' +
-              '<button class="arr-btn" ' + (i === 0 ? 'disabled' : '') + ' onclick="arrMove(\'' + containerId + '\',' + i + ',-1)">▲</button>' +
-              '<button class="arr-btn" ' + (i === ids.length - 1 ? 'disabled' : '') + ' onclick="arrMove(\'' + containerId + '\',' + i + ',1)">▼</button>' +
-            '</div>').join('');
-    }
-
-    function arrMove(containerId, i, dir) {
-        const st = arrState[containerId];
-        if (!st) return;
-        const j = i + dir;
-        if (j < 0 || j >= st.ids.length) return;
-        const ids = st.ids.slice();
-        const t = ids[i]; ids[i] = ids[j]; ids[j] = t;
-        st.ids = ids;
-        st.save(ids);
-    }
-
-    function arrSaveRank(scope, keyFn, order, field) {
-        const updates = {};
-        scope.forEach(d => { const i = order.indexOf(keyFn(d)); if (i >= 0) updates['exams/' + d._key + '/' + field] = i; });
-        db.ref().update(updates).catch(e => alert('সেভ করা যায়নি: ' + e.message));
-    }
-    function arrSaveItems(orderedKeys) {
-        const updates = {};
-        orderedKeys.forEach((key, i) => { updates['exams/' + key + '/itemOrder'] = i; });
-        db.ref().update(updates).catch(e => alert('সেভ করা যায়নি: ' + e.message));
-    }
-
-    function arrFillSelect(sel, names, placeholder) {
-        const prev = sel.value;
-        sel.innerHTML = '<option value="">' + placeholder + '</option>' +
-            names.map(n => '<option value="' + arrEsc(n) + '">' + arrEsc(n) + '</option>').join('');
-        sel.value = names.includes(prev) ? prev : (names[0] || '');
+    function buildArrTree() {
+        const all = arrItems();
+        arrTree = arrNames(all, d => d.category, 'catOrder').map(ex => {
+            const inE = all.filter(d => d.category === ex);
+            return { name: ex, tabs: arrNames(inE, arrTab, 'tabOrder').map(tb => {
+                const inT = inE.filter(d => arrTab(d) === tb);
+                return { name: tb, menus: arrNames(inT, d => d.subject, 'menuOrder').map(mn => ({
+                    name: mn,
+                    items: arrOrderedItems(inT.filter(d => d.subject === mn)).map(d => ({ key: d._key, chapter: d.chapter, sub: d.subFilter || '' }))
+                })) };
+            }) };
+        });
     }
 
     function renderArrange() {
-        const all = arrItems();
-
-        // ১. পরীক্ষা
-        const exams = arrNames(all, d => d.category, 'catOrder');
-        arrRender('arr-exams', exams, exams,
-            exams.map(n => all.filter(d => d.category === n).length + 'টি'),
-            order => arrSaveRank(all, d => d.category, order, 'catOrder'));
-
-        // ২. ট্যাব (নির্বাচিত পরীক্ষার)
-        const selE = document.getElementById('arr-exam-sel');
-        arrFillSelect(selE, exams, '— পরীক্ষা বাছুন —');
-        const inExam = all.filter(d => d.category === selE.value);
-        const tabs = selE.value ? arrNames(inExam, arrTab, 'tabOrder') : [];
-        arrRender('arr-tabs', tabs, tabs,
-            tabs.map(n => inExam.filter(d => arrTab(d) === n).length + 'টি'),
-            order => arrSaveRank(inExam, arrTab, order, 'tabOrder'));
-
-        // ৩. মেনু (নির্বাচিত ট্যাবের)
-        const selT = document.getElementById('arr-tab-sel');
-        arrFillSelect(selT, tabs, '— ট্যাব বাছুন —');
-        const inTab = inExam.filter(d => arrTab(d) === selT.value);
-        const menus = selT.value ? arrNames(inTab, d => d.subject, 'menuOrder') : [];
-        arrRender('arr-menus', menus, menus,
-            menus.map(n => inTab.filter(d => d.subject === n).length + 'টি'),
-            order => arrSaveRank(inTab, d => d.subject, order, 'menuOrder'));
-
-        // ৪. সাব-ফিল্টার ও চ্যাপ্টার (নির্বাচিত মেনুর)
-        const selM = document.getElementById('arr-menu-sel');
-        arrFillSelect(selM, menus, '— মেনু বাছুন —');
-        const inMenu = inTab.filter(d => d.subject === selM.value);
-        const withSub = inMenu.filter(d => d.subFilter);
-        const subs = selM.value ? arrNames(withSub, d => d.subFilter, 'subOrder') : [];
-        arrRender('arr-subs', subs, subs,
-            subs.map(n => withSub.filter(d => d.subFilter === n).length + 'টি'),
-            order => arrSaveRank(withSub, d => d.subFilter, order, 'subOrder'));
-
-        const ordered = selM.value ? arrOrderedItems(inMenu) : [];
-        arrRender('arr-items', ordered.map(d => d._key), ordered.map(d => d.chapter),
-            ordered.map(d => d.subFilter || ''), arrSaveItems);
+        if (arrDirty) return;   // সাজানোর মাঝখানে ডাটাবেসের বদলে কাজ নষ্ট হতে দেওয়া হবে না
+        buildArrTree(); drawArr();
     }
+
+    function arrUpdateBar() {
+        document.getElementById('arr-save').disabled = !arrDirty;
+        document.getElementById('arr-cancel').disabled = !arrDirty;
+        document.getElementById('arr-badge').style.display = arrDirty ? 'inline-block' : 'none';
+    }
+
+    function arrCount(n) { return n + 'টি'; }
+
+    function drawArr() {
+        const root = document.getElementById('arr-tree');
+        root.innerHTML = '';
+        if (!arrTree.length) { root.innerHTML = '<div class="arr-empty">এখনো কোনো পরীক্ষা নেই</div>'; arrUpdateBar(); return; }
+        root.appendChild(arrBuildList(arrTree, 1, ''));
+        arrUpdateBar();
+    }
+
+    function arrBuildList(arr, lvl, path) {
+        const list = document.createElement('div');
+        list.className = 'arr-list';
+        list._arr = arr;
+        arr.forEach(item => {
+            const key = path + '/' + (item.name !== undefined ? item.name : item.key);
+            const node = document.createElement('div');
+            node.className = 'arr-node lvl' + lvl;
+            node._ref = item;
+
+            const head = document.createElement('div');
+            head.className = 'arr-head';
+            const grip = document.createElement('button');
+            grip.type = 'button'; grip.className = 'arr-grip'; grip.textContent = '⠿'; grip.title = 'টেনে সাজান';
+            grip.addEventListener('pointerdown', e => arrStartDrag(e, node, grip));
+            grip.addEventListener('click', e => e.stopPropagation());
+            head.appendChild(grip);
+
+            const kids = lvl === 1 ? item.tabs : lvl === 2 ? item.menus : lvl === 3 ? item.items : null;
+            if (kids) {
+                const caret = document.createElement('span');
+                caret.className = 'arr-caret'; caret.textContent = arrOpen.has(key) ? '▼' : '▶';
+                head.appendChild(caret);
+            }
+            const nm = document.createElement('span');
+            nm.className = 'arr-name';
+            if (lvl === 4) {
+                nm.textContent = item.chapter;
+                if (item.sub) { const sm = document.createElement('small'); sm.textContent = '[' + item.sub + ']'; nm.appendChild(sm); }
+            } else {
+                const icon = lvl === 1 ? '🏫 ' : lvl === 2 ? '🗂️ ' : '📋 ';
+                nm.textContent = icon + item.name;
+                const total = lvl === 1 ? item.tabs.reduce((a, t) => a + t.menus.reduce((b, m) => b + m.items.length, 0), 0)
+                            : lvl === 2 ? item.menus.reduce((b, m) => b + m.items.length, 0) : item.items.length;
+                const sm = document.createElement('small'); sm.textContent = '(' + arrCount(total) + ')'; nm.appendChild(sm);
+            }
+            head.appendChild(nm);
+            if (kids) head.addEventListener('click', () => { arrOpen.has(key) ? arrOpen.delete(key) : arrOpen.add(key); drawArr(); });
+            node.appendChild(head);
+
+            if (kids && arrOpen.has(key)) {
+                const wrap = document.createElement('div');
+                wrap.className = 'arr-kids';
+                wrap.appendChild(arrBuildList(kids, lvl + 1, key));
+                node.appendChild(wrap);
+            }
+            list.appendChild(node);
+        });
+        return list;
+    }
+
+    // ⠿ ধরে টানা (মাউস ও টাচ দুটোতেই কাজ করে)
+    function arrStartDrag(ev, node, grip) {
+        ev.preventDefault();
+        const list = node.parentNode;
+        node.classList.add('arr-dragging');
+        const move = e => {
+            const y = e.clientY;
+            let ref = null;
+            for (const sib of [...list.children]) {
+                if (sib === node) continue;
+                const r = sib.getBoundingClientRect();
+                if (y < r.top + r.height / 2) { ref = sib; break; }
+            }
+            if (ref !== node.nextSibling) list.insertBefore(node, ref);
+            if (y < 70) window.scrollBy(0, -14); else if (y > window.innerHeight - 70) window.scrollBy(0, 14);
+        };
+        const up = () => {
+            document.removeEventListener('pointermove', move);
+            document.removeEventListener('pointerup', up);
+            document.removeEventListener('pointercancel', up);
+            node.classList.remove('arr-dragging');
+            const order = [...list.children].map(n => n._ref), arr = list._arr;
+            if (order.some((o, i) => o !== arr[i])) { arr.splice(0, arr.length, ...order); arrDirty = true; }
+            drawArr();
+        };
+        // পুরো পেজে ধরা হয়: সারি সরালে ব্রাউজার "ধরে রাখা" ছেড়ে দেয়, তখন গ্রিপে আর ঘটনা আসে না
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+        document.addEventListener('pointercancel', up);
+    }
+
+    function arrToggleAll(open) {
+        arrOpen.clear();
+        if (open) arrTree.forEach(ex => { const k1 = '/' + ex.name; arrOpen.add(k1);
+            ex.tabs.forEach(tb => { const k2 = k1 + '/' + tb.name; arrOpen.add(k2);
+                tb.menus.forEach(mn => arrOpen.add(k2 + '/' + mn.name)); }); });
+        drawArr();
+    }
+
+    // সব বদল একসঙ্গে সেভ (একটাই লেখা)
+    function saveArrange() {
+        if (!arrDirty) return;
+        const u = {};
+        arrTree.forEach((ex, i) => ex.tabs.forEach((tb, j) => tb.menus.forEach((mn, k) => {
+            const subIdx = new Map();
+            mn.items.forEach((it, p) => {
+                if (it.sub && !subIdx.has(it.sub)) subIdx.set(it.sub, subIdx.size);
+                const b = 'exams/' + it.key + '/';
+                u[b + 'catOrder'] = i; u[b + 'tabOrder'] = j; u[b + 'menuOrder'] = k; u[b + 'itemOrder'] = p;
+                if (it.sub) u[b + 'subOrder'] = subIdx.get(it.sub);
+            });
+        })));
+        const btn = document.getElementById('arr-save'); btn.disabled = true; btn.textContent = 'সেভ হচ্ছে...';
+        db.ref().update(u).then(() => {
+            arrDirty = false; btn.textContent = '💾 সেভ করুন';
+            renderArrange();
+            alert('✅ ক্রম সেভ হয়েছে। পোর্টালে এখন নতুন ক্রম দেখা যাবে।');
+        }).catch(err => {
+            btn.textContent = '💾 সেভ করুন'; arrUpdateBar();
+            alert('সেভ করা যায়নি: ' + err.message);
+        });
+    }
+
+    function cancelArrange() {
+        if (arrDirty && !confirm('সাজানো বদলগুলো বাতিল করে আগের অবস্থায় ফিরবেন?')) return;
+        arrDirty = false; renderArrange();
+    }
+
+    window.addEventListener('beforeunload', e => { if (arrDirty) { e.preventDefault(); e.returnValue = ''; } });
 </script>
 
 </body>
