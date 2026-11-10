@@ -37,9 +37,9 @@
 
         /* Grid */
         .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 20px; }
-        .box { background: white; padding: 20px; border-radius: 16px; text-align: center; cursor: pointer; display: flex; flex-direction: column; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid white; transition: 0.1s; position: relative; }
+        .box { background: white; padding: 16px 14px; border-radius: 16px; text-align: center; cursor: pointer; display: flex; flex-direction: column; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid white; transition: 0.1s; position: relative; }
         .box:active { transform: scale(0.96); background: #f0f9ff; }
-        .box img { width: 50px; height: 50px; margin-bottom: 10px; border-radius: 10px; }
+        .box img { width: 38px; height: 38px; margin-bottom: 8px; border-radius: 9px; object-fit: contain; }
         .box-title { font-weight: 700; font-size: 0.95rem; }
         
         /* Lock Icon Overlay */
@@ -150,6 +150,31 @@
     const db = firebase.database();
     let allData = [];
 
+    // ---- ক্রম (অ্যাডমিন প্যানেলের "Arrange" ট্যাব থেকে সাজানো) ----
+    // ক্রম না দেওয়া নতুন জিনিস সবার শেষে, আগের নিয়মেই আসে
+    function rankOf(items, f) {
+        let m = Infinity;
+        items.forEach(i => { if (typeof i[f] === 'number' && i[f] < m) m = i[f]; });
+        return m;
+    }
+    function orderedNames(items, nameFn, f) {
+        const groups = new Map();
+        items.forEach(i => { const n = nameFn(i); if (!groups.has(n)) groups.set(n, []); groups.get(n).push(i); });
+        return [...groups.entries()]
+            .map(([n, arr], idx) => ({ n: n, r: rankOf(arr, f), idx: idx }))
+            .sort((a, b) => a.r === b.r ? a.idx - b.idx : (a.r < b.r ? -1 : 1))
+            .map(g => g.n);
+    }
+    function orderedItems(items) {
+        return items.map((it, idx) => ({ it: it, idx: idx }))
+            .sort((a, b) => {
+                const x = typeof a.it.itemOrder === 'number' ? a.it.itemOrder : Infinity;
+                const y = typeof b.it.itemOrder === 'number' ? b.it.itemOrder : Infinity;
+                return x === y ? a.idx - b.idx : (x < y ? -1 : 1);
+            })
+            .map(o => o.it);
+    }
+
     // Load Data
     db.ref('exams').on('value', (snapshot) => {
         const data = snapshot.val();
@@ -157,8 +182,8 @@
         grid.innerHTML = "";
         if(!data) { grid.innerHTML = "<div style='text-align:center; width:100%; grid-column:span 2;'>কোনো ডেটা নেই</div>"; return; }
         
-        allData = Object.values(data);
-        const uniqueExams = [...new Set(allData.map(item => item.category))];
+        allData = Object.entries(data).map(([k, v]) => Object.assign({ _key: k }, v));
+        const uniqueExams = orderedNames(allData, d => d.category, 'catOrder');
 
         uniqueExams.forEach(cat => {
             const catItems = allData.filter(d => d.category === cat);
@@ -202,7 +227,7 @@
         document.getElementById('sheet').classList.add('active');
         
         const examData = allData.filter(d => d.category === cat);
-        const topTabs = [...new Set(examData.map(d => d.topTab || "Mock Tests"))]; 
+        const topTabs = orderedNames(examData, d => d.topTab || "Mock Tests", 'tabOrder'); 
         
         const topCont = document.getElementById('topTabsContainer');
         topCont.innerHTML = "";
@@ -220,7 +245,7 @@
         if(el) el.classList.add('active');
 
         const filtered = allData.filter(d => d.category === currentExam && (d.topTab || "Mock Tests") === tab);
-        const menus = [...new Set(filtered.map(d => d.subject))];
+        const menus = orderedNames(filtered, d => d.subject, 'menuOrder');
 
         const menuCont = document.getElementById('mainMenuContainer');
         menuCont.innerHTML = "";
@@ -238,8 +263,8 @@
         document.querySelectorAll('.tab-link').forEach(b => b.classList.remove('active'));
         if(el) el.classList.add('active');
 
-        const filtered = allData.filter(d => d.category === currentExam && (d.topTab || "Mock Tests") === currentTopTab && d.subject === menu);
-        const subFilters = [...new Set(filtered.map(d => d.subFilter).filter(s => s))];
+        const filtered = orderedItems(allData.filter(d => d.category === currentExam && (d.topTab || "Mock Tests") === currentTopTab && d.subject === menu));
+        const subFilters = orderedNames(filtered.filter(d => d.subFilter), d => d.subFilter, 'subOrder');
         const subCont = document.getElementById('subFilterContainer');
         subCont.innerHTML = "";
 
@@ -259,7 +284,7 @@
     function selectSub(sub, el) {
         document.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
         if(el) el.classList.add('active');
-        let filtered = allData.filter(d => d.category === currentExam && (d.topTab || "Mock Tests") === currentTopTab && d.subject === currentMenu);
+        let filtered = orderedItems(allData.filter(d => d.category === currentExam && (d.topTab || "Mock Tests") === currentTopTab && d.subject === currentMenu));
         if (sub !== 'ALL') filtered = filtered.filter(d => d.subFilter === sub);
         renderList(filtered);
     }
