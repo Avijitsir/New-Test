@@ -23,6 +23,18 @@
         .tab-btn.tab-single.active { background: #4361ee; }
         .tab-btn.tab-bulk.active { background: #00b894; }
         .tab-btn.tab-list.active { background: #fbc531; color: #333; }
+        .tab-btn.tab-arrange.active { background: #a55eea; }
+
+        /* ARRANGE TAB */
+        .arr-block { background: #faf8ff; border: 1px solid #e6dcfb; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+        .arr-block h4 { margin: 0 0 10px 0; color: #5f27cd; }
+        .arr-row { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 8px 10px; margin-top: 6px; }
+        .arr-num { min-width: 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 50%; background: #eef2ff; color: #4361ee; font-weight: bold; font-size: 0.8rem; }
+        .arr-name { flex: 1; font-weight: 600; word-break: break-word; }
+        .arr-name small { color: #888; font-weight: normal; margin-left: 6px; }
+        .arr-btn { width: 38px; padding: 6px 0; border: 1px solid #d6c8f5; background: #f3edff; color: #5f27cd; border-radius: 6px; cursor: pointer; font-size: 0.95rem; }
+        .arr-btn:disabled { opacity: 0.3; cursor: default; }
+        .arr-empty { color: #999; padding: 6px 2px; }
 
         .tab-content { display: none; animation: fadeIn 0.3s ease-in-out; }
         .tab-content.active { display: block; }
@@ -110,6 +122,7 @@
         <button class="tab-btn tab-single active" onclick="openTab('section-single')">📝 Single Entry</button>
         <button class="tab-btn tab-bulk" onclick="openTab('section-bulk')">🛠️ Bulk Tools</button>
         <button class="tab-btn tab-list" onclick="openTab('section-list')">📂 File List</button>
+        <button class="tab-btn tab-arrange" onclick="openTab('section-arrange')">↕️ Arrange</button>
     </div>
 
     <div id="section-single" class="tab-content active section-box" style="border-top: 5px solid #4361ee;">
@@ -250,6 +263,37 @@
         </div>
     </div>
 
+    <div id="section-arrange" class="tab-content section-box" style="border-top: 5px solid #a55eea;">
+        <div class="section-title">↕️ ক্রম সাজান (Arrange Order)</div>
+        <p style="margin-top:0; color:#636e72;">▲ ▼ চাপলে জিনিসটা ওপরে বা নিচে সরবে। প্রতিটা বদল সঙ্গে সঙ্গে সেভ হয় এবং পোর্টালে দেখা যায়, আলাদা সেভ বোতাম নেই। নতুন যোগ করা জিনিস সবার শেষে আসে।</p>
+
+        <div class="arr-block">
+            <h4>🏫 ১. পরীক্ষার ক্রম (পোর্টালের হোমপেজ)</h4>
+            <div id="arr-exams"></div>
+        </div>
+
+        <div class="arr-block">
+            <h4>🗂️ ২. ট্যাবের ক্রম</h4>
+            <select id="arr-exam-sel" onchange="renderArrange()"></select>
+            <div id="arr-tabs"></div>
+        </div>
+
+        <div class="arr-block">
+            <h4>📋 ৩. মেনুর ক্রম</h4>
+            <select id="arr-tab-sel" onchange="renderArrange()"></select>
+            <div id="arr-menus"></div>
+        </div>
+
+        <div class="arr-block">
+            <h4>🔖 ৪. সাব-ফিল্টার ও 📚 চ্যাপ্টারের ক্রম</h4>
+            <select id="arr-menu-sel" onchange="renderArrange()"></select>
+            <div style="margin-top:10px; font-weight:bold; color:#555;">সাব-ফিল্টার:</div>
+            <div id="arr-subs"></div>
+            <div style="margin-top:14px; font-weight:bold; color:#555;">চ্যাপ্টার (টেস্ট):</div>
+            <div id="arr-items"></div>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -262,6 +306,7 @@
         if(tabId === 'section-single') document.querySelector('.tab-single').classList.add('active');
         if(tabId === 'section-bulk') document.querySelector('.tab-bulk').classList.add('active');
         if(tabId === 'section-list') document.querySelector('.tab-list').classList.add('active');
+        if(tabId === 'section-arrange') { document.querySelector('.tab-arrange').classList.add('active'); renderArrange(); }
     }
 
     // Config
@@ -293,7 +338,8 @@
         } else {
             allData = [];
         }
-        filterTable(); 
+        filterTable();
+        if (typeof renderArrange === 'function') renderArrange();
     });
 
     // RENDER TABLE
@@ -534,6 +580,123 @@
         document.getElementById('modeBadge').style.background = "#4361ee";
         document.getElementById('submitBtn').innerText = "Save Single Entry";
         document.getElementById('cancelBtn').style.display = "none";
+    }
+
+    // =====================================================
+    //  ↕️ ক্রম সাজানো (Arrange)
+    //  ক্রম প্রতিটা এন্ট্রির গায়ে লেখা থাকে (catOrder, tabOrder, menuOrder, subOrder, itemOrder),
+    //  তাই নাম বদলালেও ক্রম হারায় না। পোর্টাল (index.html) একই নিয়মে সাজায়।
+    // =====================================================
+    function arrItems() { return [...allData].reverse().map(([k, v]) => Object.assign({ _key: k }, v)); } // পুরনো থেকে নতুন
+    function arrTab(d) { return d.topTab || 'Mock Tests'; }
+    function arrEsc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function arrRank(items, f) {
+        let m = Infinity;
+        items.forEach(i => { if (typeof i[f] === 'number' && i[f] < m) m = i[f]; });
+        return m;
+    }
+    function arrNames(items, nameFn, f) {
+        const groups = new Map();
+        items.forEach(i => { const n = nameFn(i); if (!groups.has(n)) groups.set(n, []); groups.get(n).push(i); });
+        return [...groups.entries()]
+            .map(([n, arr], idx) => ({ n: n, r: arrRank(arr, f), idx: idx }))
+            .sort((a, b) => a.r === b.r ? a.idx - b.idx : (a.r < b.r ? -1 : 1))
+            .map(g => g.n);
+    }
+    function arrOrderedItems(items) {
+        return items.map((it, idx) => ({ it: it, idx: idx }))
+            .sort((a, b) => {
+                const x = typeof a.it.itemOrder === 'number' ? a.it.itemOrder : Infinity;
+                const y = typeof b.it.itemOrder === 'number' ? b.it.itemOrder : Infinity;
+                return x === y ? a.idx - b.idx : (x < y ? -1 : 1);
+            })
+            .map(o => o.it);
+    }
+
+    const arrState = {}; // containerId -> { ids, save }
+
+    function arrRender(containerId, ids, labels, subs, saveFn) {
+        arrState[containerId] = { ids: ids, save: saveFn };
+        const box = document.getElementById(containerId);
+        if (!ids.length) { box.innerHTML = '<div class="arr-empty">এখানে কিছু নেই</div>'; return; }
+        box.innerHTML = ids.map((id, i) =>
+            '<div class="arr-row">' +
+              '<span class="arr-num">' + (i + 1) + '</span>' +
+              '<span class="arr-name">' + arrEsc(labels[i]) + (subs[i] ? '<small>' + arrEsc(subs[i]) + '</small>' : '') + '</span>' +
+              '<button class="arr-btn" ' + (i === 0 ? 'disabled' : '') + ' onclick="arrMove(\'' + containerId + '\',' + i + ',-1)">▲</button>' +
+              '<button class="arr-btn" ' + (i === ids.length - 1 ? 'disabled' : '') + ' onclick="arrMove(\'' + containerId + '\',' + i + ',1)">▼</button>' +
+            '</div>').join('');
+    }
+
+    function arrMove(containerId, i, dir) {
+        const st = arrState[containerId];
+        if (!st) return;
+        const j = i + dir;
+        if (j < 0 || j >= st.ids.length) return;
+        const ids = st.ids.slice();
+        const t = ids[i]; ids[i] = ids[j]; ids[j] = t;
+        st.ids = ids;
+        st.save(ids);
+    }
+
+    function arrSaveRank(scope, keyFn, order, field) {
+        const updates = {};
+        scope.forEach(d => { const i = order.indexOf(keyFn(d)); if (i >= 0) updates['exams/' + d._key + '/' + field] = i; });
+        db.ref().update(updates).catch(e => alert('সেভ করা যায়নি: ' + e.message));
+    }
+    function arrSaveItems(orderedKeys) {
+        const updates = {};
+        orderedKeys.forEach((key, i) => { updates['exams/' + key + '/itemOrder'] = i; });
+        db.ref().update(updates).catch(e => alert('সেভ করা যায়নি: ' + e.message));
+    }
+
+    function arrFillSelect(sel, names, placeholder) {
+        const prev = sel.value;
+        sel.innerHTML = '<option value="">' + placeholder + '</option>' +
+            names.map(n => '<option value="' + arrEsc(n) + '">' + arrEsc(n) + '</option>').join('');
+        sel.value = names.includes(prev) ? prev : (names[0] || '');
+    }
+
+    function renderArrange() {
+        const all = arrItems();
+
+        // ১. পরীক্ষা
+        const exams = arrNames(all, d => d.category, 'catOrder');
+        arrRender('arr-exams', exams, exams,
+            exams.map(n => all.filter(d => d.category === n).length + 'টি'),
+            order => arrSaveRank(all, d => d.category, order, 'catOrder'));
+
+        // ২. ট্যাব (নির্বাচিত পরীক্ষার)
+        const selE = document.getElementById('arr-exam-sel');
+        arrFillSelect(selE, exams, '— পরীক্ষা বাছুন —');
+        const inExam = all.filter(d => d.category === selE.value);
+        const tabs = selE.value ? arrNames(inExam, arrTab, 'tabOrder') : [];
+        arrRender('arr-tabs', tabs, tabs,
+            tabs.map(n => inExam.filter(d => arrTab(d) === n).length + 'টি'),
+            order => arrSaveRank(inExam, arrTab, order, 'tabOrder'));
+
+        // ৩. মেনু (নির্বাচিত ট্যাবের)
+        const selT = document.getElementById('arr-tab-sel');
+        arrFillSelect(selT, tabs, '— ট্যাব বাছুন —');
+        const inTab = inExam.filter(d => arrTab(d) === selT.value);
+        const menus = selT.value ? arrNames(inTab, d => d.subject, 'menuOrder') : [];
+        arrRender('arr-menus', menus, menus,
+            menus.map(n => inTab.filter(d => d.subject === n).length + 'টি'),
+            order => arrSaveRank(inTab, d => d.subject, order, 'menuOrder'));
+
+        // ৪. সাব-ফিল্টার ও চ্যাপ্টার (নির্বাচিত মেনুর)
+        const selM = document.getElementById('arr-menu-sel');
+        arrFillSelect(selM, menus, '— মেনু বাছুন —');
+        const inMenu = inTab.filter(d => d.subject === selM.value);
+        const withSub = inMenu.filter(d => d.subFilter);
+        const subs = selM.value ? arrNames(withSub, d => d.subFilter, 'subOrder') : [];
+        arrRender('arr-subs', subs, subs,
+            subs.map(n => withSub.filter(d => d.subFilter === n).length + 'টি'),
+            order => arrSaveRank(withSub, d => d.subFilter, order, 'subOrder'));
+
+        const ordered = selM.value ? arrOrderedItems(inMenu) : [];
+        arrRender('arr-items', ordered.map(d => d._key), ordered.map(d => d.chapter),
+            ordered.map(d => d.subFilter || ''), arrSaveItems);
     }
 </script>
 
