@@ -23,6 +23,12 @@ let isPaused = false;
 let filteredIndices = [];
 let quizSettings = { passMark: 30, posMark: 1, negMark: 0.33 };
 let currentQuizId = null;
+let sectionMode = false;   // section-wise mode on/off (off = single "All Sections")
+let sections = [];         // [{name, start, end}] by question index
+
+function escHtml(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function toBn(n) { return String(n).replace(/\d/g, d => '\u09E6\u09E7\u09E8\u09E9\u09EA\u09EB\u09EC\u09ED\u09EE\u09EF'[d]); }
+function secOf(idx) { return sections.findIndex(s => idx >= s.start && idx <= s.end); }
 
 function shuffleArray(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -111,7 +117,22 @@ function loadQuizFromFirebase(quizId) {
             });
 
             // 2. Randomization Logic
-            if(data.randomizeQuestions) {
+            sectionMode = false; sections = [];
+            if (data.sectionMode) {
+                // group by Subject; section order = order of first appearance
+                const names = [];
+                questions.forEach(q => { q.subject = (q.subject || 'Others').trim(); if (!names.includes(q.subject)) names.push(q.subject); });
+                if (names.length > 1) {
+                    const groups = names.map(n => questions.filter(q => q.subject === n));
+                    if (data.randomizeQuestions) groups.forEach(g => shuffleArray(g));   // shuffle only inside each section
+                    questions = [].concat(...groups);
+                    let pos = 0;
+                    sections = groups.map((g, i) => { const sec = { name: names[i], start: pos, end: pos + g.length - 1 }; pos += g.length; return sec; });
+                    sectionMode = true;
+                } else if (data.randomizeQuestions) {
+                    shuffleArray(questions);
+                }
+            } else if (data.randomizeQuestions) {
                 shuffleArray(questions);
             }
             if(data.randomizeOptions) {
@@ -148,15 +169,41 @@ function loadQuizFromFirebase(quizId) {
             }
 
             // --- 4. INSTRUCTION PAGE ---
+            const fullMarks = Number((questions.length * quizSettings.posMark).toFixed(2));
+            const chipCss = 'background:#e3f2fd; color:#0d47a1; padding:5px 12px; border-radius:16px; font-size:13px;';
+            const infoBox = `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;">
+                    <span style="${chipCss}">মোট প্রশ্ন: <b>${toBn(questions.length)}</b></span>
+                    <span style="${chipCss}">পূর্ণমান: <b>${toBn(fullMarks)}</b></span>
+                    ${sectionMode ? `<span style="${chipCss}">সেকশন: <b>${sections.map(x => escHtml(x.name) + ' (' + toBn(x.end - x.start + 1) + ')').join(' • ')}</b></span>` : ''}
+                </div>`;
+
+            // নতুন নিয়মাবলী: আগের ৫টা পয়েন্টের পর থেকে ক্রমিক নম্বর
+            let ruleNo = 5;
+            const rule = t => `<p>${toBn(++ruleNo)}. ${t}</p>`;
+            let extraRules = '';
+            if (sectionMode) extraRules += rule('<strong>সেকশন:</strong> পরীক্ষাটি বিষয় অনুযায়ী সেকশনে ভাগ করা। ওপরের সেকশনের নামে ক্লিক করলে সেই সেকশনের প্রথম প্রশ্নে যাবেন। যেকোনো সময় যেকোনো সেকশনে যেতে পারবেন। <b>সময় সব সেকশনের জন্য মিলিয়ে একটাই।</b>');
+            extraRules += rule('<strong>সময় শেষ হওয়ামাত্র</strong> আপনার পরীক্ষা নিজে থেকেই জমা হয়ে যাবে।');
+            extraRules += rule('নিচের <b>"I am ready to begin"</b> বোতামে ক্লিক করামাত্র <b>টাইমার চালু</b> হবে। তাই আগে থেকে তৈরি হয়ে নিন।');
+            extraRules += rule('উত্তর বেছে <b>"Save & Next"</b> চাপতে হবে। না চেপে অন্য প্রশ্নে চলে গেলে সেই উত্তর <b>ধরা হবে না</b>।');
+            extraRules += rule('<b>"Mark Review"</b> শুধু আপনার মনে রাখার জন্য। উত্তর বেছে Mark Review করলে সেই উত্তরও গণনায় ধরা হবে।');
+            extraRules += rule('<b>"Clear"</b> চাপলে ওই প্রশ্নের বাছা উত্তর মুছে যাবে। এতে কোনো নম্বর কাটা হবে না।');
+            extraRules += rule('পরীক্ষা চলাকালীন <b>পেজ রিফ্রেশ করবেন না, ব্যাক বোতাম চাপবেন না বা ব্রাউজার বন্ধ করবেন না।</b> করলে পরীক্ষা নষ্ট হতে পারে।');
+            extraRules += rule('<b>ফুলস্ক্রিন থেকে বেরোবেন না।</b> বেরোলে সতর্কবার্তা আসবে, "Return to Fullscreen" চেপে ফিরে আসুন।');
+            if (data.randomizeQuestions || data.randomizeOptions) extraRules += rule('প্রশ্ন বা অপশনের ক্রম <b>এলোমেলো</b> থাকতে পারে, তাই পাশের জনের সঙ্গে ক্রম মিলবে না।');
+            extraRules += rule('পরীক্ষা চলাকালীন <b>ইন্টারনেট চালু রাখুন</b> এবং ফোনে চার্জ আছে কিনা দেখে নিন।');
+            extraRules += rule('সাবমিটের পর আপনি <b>স্কোর, সঠিক-ভুলের হিসাব এবং প্রতিটি প্রশ্নের সমাধান ও ব্যাখ্যা</b> দেখতে পাবেন।');
+
             const instHTML = `
                 ${prevScoreMsg}
                 <div style="font-family: 'Roboto', sans-serif; font-size: 15px; line-height: 1.6; color:#333;">
+                    ${infoBox}
                     <h3 style="margin-top:0; margin-bottom:10px; color:#0d47a1;">সাধারণ নির্দেশাবলী (Instructions):</h3>
                     <p>১. <strong>মোট সময় (Duration):</strong> ${data.duration} মিনিট</p>
                     <p>২. <strong>পাস মার্ক (Pass Mark):</strong> ${quizSettings.passMark}</p>
                     <p>৩. <strong>মার্কিং:</strong> প্রতিটি সঠিক উত্তরের জন্য <b>+${quizSettings.posMark}</b> এবং ভুল উত্তরের জন্য <b>-${quizSettings.negMark}</b> নম্বর কাটা যাবে</p>
                     <p>৪. ডানদিকের প্যালেট ব্যবহার করে যে কোনো প্রশ্নে যাওয়া যাবে</p>
                     <p>৫. <strong>নতুন:</strong> স্ক্রিনে বামে/ডানে সোয়াইপ করে প্রশ্ন পরিবর্তন করা যাবে।</p>
+                    ${extraRules}
                     
                     <div style="background:#f9f9f9; padding:10px; border-radius:5px; margin-top:10px; font-size:13px;">
                         <strong>কালার কোড (Legend):</strong>
@@ -167,6 +214,9 @@ function loadQuizFromFirebase(quizId) {
                             <li><span class="dot-icon marked"></span> মার্ক করা (Marked for Review)</li>
                         </ul>
                     </div>
+                    <p style="margin-top:16px; padding:10px 12px; background:#fff8e1; border-left:4px solid #ffb300; border-radius:4px;">
+                        আপনি প্রস্তুত থাকলে নিচের বোতামে ক্লিক করুন। <b>ক্লিক করামাত্র পরীক্ষা শুরু হবে।</b> শুভকামনা!
+                    </p>
                 </div>`;
             
             document.getElementById('instContent').innerHTML = instHTML;
@@ -202,6 +252,7 @@ function loadQuestion(index) {
     if(status[index] === 0) status[index] = 1; 
     currentIdx = index;
     document.getElementById('currentQNum').innerText = index + 1;
+    updateSectionBar();
     const q = questions[index];
     
     let qHTML = "";
@@ -233,6 +284,46 @@ function loadQuestion(index) {
     });
 
     if(window.MathJax) MathJax.typesetPromise();
+}
+
+// সেকশন বার: চালু থাকলে প্রতিটা সেকশন, বন্ধ থাকলে স্থির "All Sections"
+function updateSectionBar() {
+    if (!sectionMode) return;
+    const bar = document.querySelector('.section-bar');
+    bar.innerHTML = '';
+    const cur = secOf(currentIdx);
+    sections.forEach((sec, i) => {
+        const d = document.createElement('div');
+        d.className = 'chip' + (i === cur ? ' active' : '');
+        d.textContent = sec.name;
+        d.onclick = () => { if (!isPaused) loadQuestion(sec.start); };
+        bar.appendChild(d);
+    });
+    const active = bar.querySelector('.chip.active');
+    if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+
+// রেজাল্টে সেকশন-ওয়ারি নম্বরের ছোট টেবিল
+function renderSectionScores() {
+    const old = document.getElementById('secScoreBox'); if (old) old.remove();
+    if (!sectionMode) return;
+    const grid = document.querySelector('#tab-score-view .score-grid'); if (!grid) return;
+    const td = 'padding:6px; border-top:1px solid #eee;';
+    const rows = sections.map(sec => {
+        let c = 0, w = 0, sk = 0;
+        for (let i = sec.start; i <= sec.end; i++) {
+            const u = userAnswers[i];
+            if (u === null) sk++; else if (u == Number(questions[i].correctIndex)) c++; else w++;
+        }
+        const sc = (c * quizSettings.posMark - w * quizSettings.negMark).toFixed(2);
+        return '<tr><td style="' + td + ' text-align:left; font-weight:bold;">' + escHtml(sec.name) + '</td><td style="' + td + ' color:#26a745;">' + c + '</td><td style="' + td + ' color:#dc3545;">' + w + '</td><td style="' + td + ' color:#888;">' + sk + '</td><td style="' + td + ' font-weight:bold;">' + sc + '</td></tr>';
+    }).join('');
+    const box = document.createElement('div');
+    box.id = 'secScoreBox'; box.style.cssText = 'margin-top:12px; overflow-x:auto;';
+    box.innerHTML = '<div style="font-weight:bold; color:#555; margin-bottom:4px;">সেকশন অনুযায়ী ফলাফল</div>' +
+        '<table style="width:100%; border-collapse:collapse; font-size:13px; text-align:center;"><thead><tr style="background:#f0f4ff;">' +
+        '<th style="padding:6px; text-align:left;">সেকশন</th><th>সঠিক</th><th>ভুল</th><th>বাদ</th><th>নম্বর</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    grid.insertAdjacentElement('afterend', box);
 }
 
 function getSelIdx() { const s = document.querySelector('.option-row.selected'); return s ? Array.from(s.parentNode.children).indexOf(s) : null; }
@@ -273,6 +364,15 @@ document.getElementById('sheetOverlay').addEventListener('click', closeDrawer);
 function renderPalette() {
     const grid = document.getElementById('paletteGrid'); grid.innerHTML = '';
     status.forEach((s, i) => {
+        if (sectionMode) {
+            const si = secOf(i);
+            if (si >= 0 && sections[si].start === i) {
+                const h = document.createElement('div');
+                h.textContent = sections[si].name;
+                h.style.cssText = 'grid-column:1/-1; font-size:12px; font-weight:bold; color:#145c94; border-bottom:1px solid #e0e0e0; padding:4px 0 2px; margin-top:' + (i === 0 ? '0' : '8px') + ';';
+                grid.appendChild(h);
+            }
+        }
         const btn = document.createElement('div'); btn.className = 'p-btn'; btn.innerText = i + 1;
         if(s===2) btn.classList.add('answered'); else if(s===1) btn.classList.add('not-answered');
         else if(s===3) btn.classList.add('marked'); else if(s===4) btn.classList.add('marked-ans');
@@ -356,6 +456,7 @@ function submitTest() {
         passBox.style.border = "1px solid #f5c6cb";
     }
 
+    renderSectionScores();
     document.getElementById('resultModal').style.display = 'flex';
     switchTab('score');
     applyFilter('all');
