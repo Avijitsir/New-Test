@@ -90,6 +90,7 @@ function createNewQuiz() {
     currentQuestions = [];
     document.getElementById('quiz-title-input').value = '';
     applyLastSettings(); // সময়, পাস মার্ক, নম্বর, Shuffle: শেষবারের মান (না থাকলে ফাঁকা)
+    document.getElementById('section-mode-check').checked = false; // sections: always OFF for a new quiz (All Sections)
     clearInputs();
     document.getElementById('quiz-id-input').value = editingQuizId;
     document.getElementById('share-link-box').style.display = 'none';
@@ -158,6 +159,7 @@ function editQuiz(id) {
         document.getElementById('quiz-neg-mark').value = d.negMark;
         document.getElementById('rand-question-check').checked = d.randomizeQuestions || false;
         document.getElementById('rand-option-check').checked = d.randomizeOptions || false;
+        document.getElementById('section-mode-check').checked = d.sectionMode || false;
         currentQuestions = d.questions || [];
         editQIndex = -1;
         clearInputs();
@@ -257,7 +259,8 @@ document.getElementById('process-bulk-btn').addEventListener('click', () => {
             const ops = [lines[1].trim(), lines[2].trim(), lines[3].trim(), lines[4].trim()];
             
             const ansLine = lines.find(l => l.toLowerCase().startsWith("answer:"));
-            const cIdx = ansLine ? ops.indexOf(ansLine.split(":")[1].trim()) : -1;
+            // প্রথম ":" এর পরের পুরো অংশ (উত্তরে নিজেই ":" থাকলেও কাটা পড়ে না, যেমন 3:2)
+            const cIdx = ansLine ? ops.indexOf(ansLine.slice(ansLine.indexOf(":") + 1).trim()) : -1;
             
             // Explanation finding
             const expLine = lines.find(l => l.toLowerCase().startsWith("explanation:"));
@@ -374,6 +377,7 @@ function saveQuizData() {
         negMark: document.getElementById('quiz-neg-mark').value,
         randomizeQuestions: document.getElementById('rand-question-check').checked,
         randomizeOptions: document.getElementById('rand-option-check').checked,
+        sectionMode: document.getElementById('section-mode-check').checked,
         questions: currentQuestions
     }).then(() => { 
         markSaved();
@@ -447,7 +451,7 @@ function exportToCSV() {
 
 
 // কুইজ সেটিংসের কোনো ঘর বদলালে "সেভ হয়নি" চিহ্ন দেখাবে
-['quiz-title-input','quiz-duration','quiz-pass-mark','quiz-pos-mark','quiz-neg-mark','rand-question-check','rand-option-check','pub-cat','pub-tab','pub-menu','pub-sub'].forEach(id => {
+['quiz-title-input','quiz-duration','quiz-pass-mark','quiz-pos-mark','quiz-neg-mark','rand-question-check','rand-option-check','section-mode-check','pub-cat','pub-tab','pub-menu','pub-sub'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', markUnsaved);
 });
