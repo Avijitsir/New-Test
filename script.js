@@ -25,6 +25,9 @@ let quizSettings = { passMark: 30, posMark: 1, negMark: 0.33 };
 let currentQuizId = null;
 let sectionMode = false;   // section-wise mode on/off (off = single "All Sections")
 let sections = [];         // [{name, start, end}] by question index
+let endTime = 0;          // পরীক্ষা শেষের ঘড়ির সময় (ms)
+let examStarted = false;
+let wakeLock = null;
 
 function escHtml(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function toBn(n) { return String(n).replace(/\d/g, d => '\u09E6\u09E7\u09E8\u09E9\u09EA\u09EB\u09EC\u09ED\u09EE\u09EF'[d]); }
@@ -41,7 +44,9 @@ function shuffleArray(array) {
 document.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     currentQuizId = urlParams.get('id');
-    if (currentQuizId) {
+    if (currentQuizId && tryRestoreAttempt()) {
+        // আগের পরীক্ষা বা রেজাল্ট ফিরিয়ে আনা হয়েছে
+    } else if (currentQuizId) {
         document.getElementById('instContent').innerHTML = "<div style='text-align:center; padding:20px; color:#666;'>Loading Quiz Details... Please wait.</div>";
         loadQuizFromFirebase(currentQuizId);
     } else {
@@ -186,10 +191,11 @@ function loadQuizFromFirebase(quizId) {
             extraRules += rule('নিচের <b>"I am ready to begin"</b> বোতামে ক্লিক করামাত্র <b>টাইমার চালু</b> হবে। তাই আগে থেকে তৈরি হয়ে নিন।');
             extraRules += rule('উত্তর বেছে <b>"Save & Next"</b> চাপতে হবে। না চেপে অন্য প্রশ্নে চলে গেলে সেই উত্তর <b>ধরা হবে না</b>।');
             extraRules += rule('<b>"Mark Review"</b> শুধু আপনার মনে রাখার জন্য। উত্তর বেছে Mark Review করলে সেই উত্তরও গণনায় ধরা হবে।');
-            extraRules += rule('<b>"Clear"</b> চাপলে ওই প্রশ্নের বাছা উত্তর মুছে যাবে। এতে কোনো নম্বর কাটা হবে না।');
+            extraRules += rule('বাছা উত্তরটির ওপর <b>আবার চাপ দিলে</b> উত্তর মুছে যাবে। এতে কোনো নম্বর কাটা হবে না। আগের প্রশ্নে ফিরতে <b>"Previous"</b> বোতাম আছে।');
             extraRules += rule('পরীক্ষা চলাকালীন <b>পেজ রিফ্রেশ করবেন না, ব্যাক বোতাম চাপবেন না বা ব্রাউজার বন্ধ করবেন না।</b> করলে পরীক্ষা নষ্ট হতে পারে।');
             extraRules += rule('<b>ফুলস্ক্রিন থেকে বেরোবেন না।</b> বেরোলে সতর্কবার্তা আসবে, "Return to Fullscreen" চেপে ফিরে আসুন।');
             if (data.randomizeQuestions || data.randomizeOptions) extraRules += rule('প্রশ্ন বা অপশনের ক্রম <b>এলোমেলো</b> থাকতে পারে, তাই পাশের জনের সঙ্গে ক্রম মিলবে না।');
+            extraRules += rule('ফোনে কল এলে, স্ক্রিন লক হলে বা পেজ হঠাৎ বন্ধ হয়ে গেলে <b>একই লিংকে আবার ঢুকুন।</b> আপনার উত্তর ও পরীক্ষা যেখানে ছিল সেখান থেকেই চলবে, তবে <b>সময় চলতে থাকবে।</b>');
             extraRules += rule('পরীক্ষা চলাকালীন <b>ইন্টারনেট চালু রাখুন</b> এবং ফোনে চার্জ আছে কিনা দেখে নিন।');
             extraRules += rule('সাবমিটের পর আপনি <b>স্কোর, সঠিক-ভুলের হিসাব এবং প্রতিটি প্রশ্নের সমাধান ও ব্যাখ্যা</b> দেখতে পাবেন।');
 
@@ -234,14 +240,23 @@ document.getElementById('startTestBtn').addEventListener('click', () => {
     document.getElementById('instructionScreen').style.display = 'none';
     document.getElementById('quizMainArea').style.display = 'flex'; 
     if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+    examStarted = true;
     loadQuestion(0);
     startTimer();
+    keepAwake();
+    saveState();
 });
 
 // Fullscreen Logic
 document.addEventListener('fullscreenchange', () => {
     if (!document.fullscreenElement && !isSubmitted) document.getElementById('fullscreenOverlay').style.display = 'flex';
     else document.getElementById('fullscreenOverlay').style.display = 'none';
+    // ব্রাউজারের "exit full screen" বার্তা কয়েক সেকেন্ড নিচের বোতাম ঢাকে, তাই তখন বোতাম একটু ওপরে তোলা থাকে
+    const ft = document.querySelector('.app-footer');
+    if (document.fullscreenElement && examStarted && ft) {
+        ft.style.bottom = '70px';
+        setTimeout(() => { ft.style.bottom = '0'; }, 6000);
+    }
 });
 document.getElementById('returnFsBtn').addEventListener('click', () => {
     if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
@@ -253,6 +268,7 @@ function loadQuestion(index) {
     currentIdx = index;
     document.getElementById('currentQNum').innerText = index + 1;
     updateSectionBar();
+    saveState();
     const q = questions[index];
     
     let qHTML = "";
@@ -279,11 +295,11 @@ function loadQuestion(index) {
         optContent += `<div class="opt-text">${opt}</div></div>`;
         
         row.innerHTML = optContent;
-        row.onclick = () => { if(isPaused) return; document.querySelectorAll('.option-row').forEach(r => r.classList.remove('selected')); row.classList.add('selected'); };
+        row.onclick = () => { if(isPaused) return; const was = row.classList.contains('selected'); document.querySelectorAll('.option-row').forEach(r => r.classList.remove('selected')); if(!was) row.classList.add('selected'); };
         container.appendChild(row);
     });
 
-    if(window.MathJax) MathJax.typesetPromise();
+    if(window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise();
 }
 
 // সেকশন বার: চালু থাকলে প্রতিটা সেকশন, বন্ধ থাকলে স্থির "All Sections"
@@ -331,14 +347,14 @@ function getSelIdx() { const s = document.querySelector('.option-row.selected');
 document.getElementById('markReviewBtn').addEventListener('click', () => { 
     if(isPaused) return; 
     const i = getSelIdx(); 
-    if(i!==null){ userAnswers[currentIdx]=i; status[currentIdx]=4; } else status[currentIdx]=3; 
+    if(i!==null){ userAnswers[currentIdx]=i; status[currentIdx]=4; } else { userAnswers[currentIdx]=null; status[currentIdx]=3; } saveState(); 
     if(currentIdx < questions.length - 1) loadQuestion(currentIdx + 1); else openDrawer();
 });
 
 document.getElementById('saveNextBtn').addEventListener('click', () => { 
     if(isPaused) return; 
     const i = getSelIdx(); 
-    if(i!==null){ userAnswers[currentIdx]=i; status[currentIdx]=2; } else status[currentIdx]=1; 
+    if(i!==null){ userAnswers[currentIdx]=i; status[currentIdx]=2; } else { userAnswers[currentIdx]=null; status[currentIdx]=1; } saveState(); 
     
     if (currentIdx === questions.length - 1) { 
         if (confirm("আপনি কি নিশ্চিত যে আপনি পরীক্ষা শেষ করতে চান?")) submitTest(); 
@@ -347,11 +363,13 @@ document.getElementById('saveNextBtn').addEventListener('click', () => {
     }
 });
 
-document.getElementById('clearResponseBtn').addEventListener('click', () => { 
-    if(isPaused) return; 
-    document.querySelectorAll('.option-row').forEach(r => r.classList.remove('selected')); 
-    userAnswers[currentIdx]=null; 
-    status[currentIdx]=1; 
+document.getElementById('prevBtn').addEventListener('click', () => {
+    if(isPaused || currentIdx === 0) return;
+    const i = getSelIdx();
+    if(i!==null){ userAnswers[currentIdx]=i; status[currentIdx] = (status[currentIdx]===4) ? 4 : 2; }
+    else { userAnswers[currentIdx]=null; if(status[currentIdx]!==3) status[currentIdx]=1; }
+    saveState();
+    loadQuestion(currentIdx - 1);
 });
 
 // Drawer & Timer
@@ -382,25 +400,30 @@ function renderPalette() {
     });
 }
 
+function tick() {
+    // ঘড়ির সময় ধরে হিসাব: স্ক্রিন লক বা কলের সময়ও সঠিকভাবে কমে
+    timeLeft = Math.max(0, Math.round((endTime - Date.now()) / 1000));
+    const m = parseInt(timeLeft / 60), s = parseInt(timeLeft % 60);
+    document.getElementById('timerDisplay').innerText = `${m}:${s<10?'0'+s:s}`;
+    if (timeLeft <= 0) { clearInterval(timerInterval); submitTest(); }
+}
+
 function startTimer() {
     clearInterval(timerInterval);
-    timerInterval = setInterval(() => {
-        if(timeLeft <= 0) { clearInterval(timerInterval); submitTest(); return; }
-        timeLeft--;
-        let m = parseInt(timeLeft / 60), s = parseInt(timeLeft % 60);
-        document.getElementById('timerDisplay').innerText = `${m}:${s<10?'0'+s:s}`;
-    }, 1000);
+    endTime = Date.now() + timeLeft * 1000;
+    tick();
+    if (timeLeft > 0) timerInterval = setInterval(tick, 1000);
 }
 
 document.getElementById('pauseBtn').addEventListener('click', () => {
     const ca = document.querySelector('.content-area'); const b = document.getElementById('pauseBtn');
-    if(!isPaused) { clearInterval(timerInterval); isPaused=true; b.innerText="Resume"; b.style.background="#ff9800"; b.style.color="white"; ca.style.opacity='0'; } 
-    else { startTimer(); isPaused=false; b.innerText="Pause"; b.style.background="white"; b.style.color="#007bff"; ca.style.opacity='1'; }
+    if(!isPaused) { clearInterval(timerInterval); isPaused=true; b.innerText="Resume"; b.style.background="#ff9800"; b.style.color="white"; ca.style.opacity='0'; saveState(); } 
+    else { startTimer(); isPaused=false; b.innerText="Pause"; b.style.background="white"; b.style.color="#007bff"; ca.style.opacity='1'; saveState(); }
 });
 
 // --- SUBMIT & RESULT ANALYSIS ---
-function submitTest() {
-    if(isSubmitted) return;
+function submitTest(fromRestore) {
+    if(isSubmitted && !fromRestore) return;
     isSubmitted = true;
     clearInterval(timerInterval);
     
@@ -426,12 +449,12 @@ function submitTest() {
     const score = s.toFixed(2);
     
     const stdName = 'Anonymous'; // নাম নেওয়া হয় না
-    if(currentQuizId) {
+    if(currentQuizId && !fromRestore) {
         database.ref('results/' + currentQuizId).push({
             name: stdName, score: score, correct: c, wrong: w, date: new Date().toLocaleString()
         });
     }
-    localStorage.setItem('last_score_' + currentQuizId, score);
+    if(!fromRestore) localStorage.setItem('last_score_' + currentQuizId, score);
 
     document.getElementById('resScore').innerText = score; 
     document.getElementById('resCorrect').innerText = c; 
@@ -460,6 +483,8 @@ function submitTest() {
     document.getElementById('resultModal').style.display = 'flex';
     switchTab('score');
     applyFilter('all');
+    saveState();
+    releaseWake();
 }
 
 function applyFilter(t) {
@@ -574,7 +599,7 @@ function loadResultQuestion(realIdx) {
         explBox.style.display = "none"; 
     }
 
-    if(window.MathJax) MathJax.typesetPromise();
+    if(window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise();
     
     document.getElementById('resPrevBtn').onclick = () => { if(nIdx > 0) loadResultQuestion(filteredIndices[nIdx - 1]); };
     document.getElementById('resNextBtn').onclick = () => { if(nIdx < filteredIndices.length - 1) loadResultQuestion(filteredIndices[nIdx + 1]); };
@@ -595,5 +620,103 @@ function switchTab(tabName) {
     }
 }
 
-document.getElementById('submitTestBtn').addEventListener('click', submitTest);
-window.addEventListener('beforeunload', (e) => { if(!isSubmitted) { e.preventDefault(); e.returnValue = ''; } });
+document.getElementById('submitTestBtn').addEventListener('click', () => submitTest());
+window.addEventListener('beforeunload', (e) => { if(!isSubmitted && !leavingPage) { e.preventDefault(); e.returnValue = ''; } });
+
+// =====================================================================
+//  কল / স্ক্রিন লক / পেজ রিলোড: পরীক্ষা ও রেজাল্ট ফোনে সেভ থাকে, ফিরলে আবার চালু হয়
+// =====================================================================
+function stateKey() { return 'exam_state_' + currentQuizId; }
+
+function saveState() {
+    if (!currentQuizId || !examStarted) return;
+    try {
+        localStorage.setItem(stateKey(), JSON.stringify({
+            v: 1, savedAt: Date.now(),
+            questions: questions, sections: sections, sectionMode: sectionMode, quizSettings: quizSettings,
+            status: status, userAnswers: userAnswers, currentIdx: currentIdx,
+            endTime: endTime, timeLeft: timeLeft, isPaused: isPaused, submitted: isSubmitted
+        }));
+    } catch (e) { /* স্টোরেজ ভরা বা বন্ধ থাকলে চুপচাপ বাদ */ }
+}
+
+// স্ক্রিন যেন নিজে থেকে বন্ধ না হয় (৩০ সেকেন্ডের অটো-লক আটকায়)
+async function keepAwake() {
+    try {
+        if (!('wakeLock' in navigator) || isSubmitted || document.visibilityState !== 'visible' || wakeLock) return;
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch (e) { wakeLock = null; }
+}
+function releaseWake() { try { if (wakeLock) wakeLock.release(); } catch (e) {} wakeLock = null; }
+
+// ফোন আনলক বা কল শেষে ট্যাবে ফিরলে: সময় ধরতা ঠিক করা ও স্ক্রিন আবার জাগিয়ে রাখা
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !examStarted || isSubmitted) return;
+    keepAwake();
+    if (!isPaused) tick();
+});
+document.getElementById('returnFsBtn').addEventListener('click', () => keepAwake());
+
+// আগের অসমাপ্ত পরীক্ষা বা সাবমিট করা রেজাল্ট থাকলে ফিরিয়ে আনে। ফিরিয়ে আনলে true
+function tryRestoreAttempt() {
+    let st = null;
+    try { st = JSON.parse(localStorage.getItem(stateKey()) || 'null'); } catch (e) { st = null; }
+    if (!st || st.v !== 1 || !st.questions || !st.questions.length || !st.status || !st.userAnswers) return false;
+    if (Date.now() - (st.savedAt || 0) > 24 * 3600 * 1000) { try { localStorage.removeItem(stateKey()); } catch (e) {} return false; }
+
+    questions = st.questions; sections = st.sections || []; sectionMode = !!st.sectionMode;
+    quizSettings = st.quizSettings || quizSettings; status = st.status; userAnswers = st.userAnswers;
+    currentIdx = Math.min(Math.max(st.currentIdx || 0, 0), questions.length - 1);
+    document.getElementById('dispPosMark').innerText = '+' + quizSettings.posMark;
+    document.getElementById('dispNegMark').innerText = '-' + quizSettings.negMark;
+    examStarted = true;
+    document.getElementById('instructionScreen').style.display = 'none';
+    document.getElementById('quizMainArea').style.display = 'flex';
+
+    if (st.submitted) { submitTest(true); return true; }   // সাবমিট করা রেজাল্ট আবার দেখানো (আবার জমা পড়ে না)
+
+    isPaused = !!st.isPaused;
+    timeLeft = isPaused ? (st.timeLeft || 0) : Math.max(0, Math.round((st.endTime - Date.now()) / 1000));
+    loadQuestion(currentIdx);
+    if (timeLeft <= 0) { submitTest(); return true; }        // দূরে থাকতে সময় শেষ: নিজে জমা হবে
+    if (isPaused) {
+        const b = document.getElementById('pauseBtn');
+        b.innerText = 'Resume'; b.style.background = '#ff9800'; b.style.color = 'white';
+        document.querySelector('.content-area').style.opacity = '0';
+        document.getElementById('timerDisplay').innerText = parseInt(timeLeft / 60) + ':' + (timeLeft % 60 < 10 ? '0' : '') + (timeLeft % 60);
+    } else {
+        startTimer();
+    }
+    // রিলোডে ফুলস্ক্রিন চলে যায়: যেসব ফোনে ফুলস্ক্রিন চলে, সেখানে ফেরার বোতাম দেখানো
+    if (document.fullscreenEnabled && !document.fullscreenElement) document.getElementById('fullscreenOverlay').style.display = 'flex';
+    keepAwake();
+    return true;
+}
+
+// "Close & Re-attempt": সেভ করা অবস্থা মুছে নতুন করে শুরু
+function retakeTest() {
+    try { localStorage.removeItem(stateKey()); } catch (e) {}
+    location.reload();
+}
+
+
+// =====================================================================
+//  ফোনের Back বোতাম: সমাধান → স্কোর কার্ড → (নিশ্চিত করে) পোর্টাল; পরীক্ষা চলার সময় ভুল করে বেরোনো আটকায়
+// =====================================================================
+let leavingPage = false;
+history.pushState({ guard: 1 }, '');
+window.addEventListener('popstate', () => {
+    const shown = id => { const e = document.getElementById(id); return e && getComputedStyle(e).display !== 'none'; };
+    const stay = () => history.pushState({ guard: 1 }, '');
+    const leave = () => { leavingPage = true; history.back(); };
+    if (shown('resultModal')) {
+        if (shown('tab-solution-view')) { switchTab('score'); stay(); return; }
+        if (confirm('পোর্টালে ফিরে যেতে চান?')) leave(); else stay();
+    } else if (examStarted && !isSubmitted) {
+        if (drawer.classList.contains('open')) { closeDrawer(); stay(); return; }
+        if (confirm('পরীক্ষা চলছে। সত্যিই বেরিয়ে যেতে চান? (ফিরে এলে একই লিংকে উত্তর ও সময় ঠিক থাকবে)')) leave(); else stay();
+    } else {
+        leave();
+    }
+});
