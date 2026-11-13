@@ -175,57 +175,82 @@ function loadQuizFromFirebase(quizId) {
 
             // --- 4. INSTRUCTION PAGE ---
             const fullMarks = Number((questions.length * quizSettings.posMark).toFixed(2));
-            const chipCss = 'background:#e3f2fd; color:#0d47a1; padding:5px 12px; border-radius:16px; font-size:13px;';
-            const infoBox = `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;">
-                    <span style="${chipCss}">মোট প্রশ্ন: <b>${toBn(questions.length)}</b></span>
-                    <span style="${chipCss}">পূর্ণমান: <b>${toBn(fullMarks)}</b></span>
-                    ${sectionMode ? `<span style="${chipCss}">সেকশন: <b>${sections.map(x => escHtml(x.name) + ' (' + toBn(x.end - x.start + 1) + ')').join(' • ')}</b></span>` : ''}
-                </div>`;
+            // রঙিন কার্ড-স্টাইল নির্দেশাবলী (লেখা আগের মতোই, শুধু সাজানো বদলেছে)
+            const COL = { blue: ['#1565c0', '#e3f2fd'], green: ['#2e7d32', '#e8f5e9'], purple: ['#6a1b9a', '#f3e5f5'], red: ['#c62828', '#ffebee'], orange: ['#e65100', '#fff3e0'] };
+            const stat = (icon, label, val, k) => `<div style="background:${COL[k][1]}; border-radius:12px; padding:10px 8px; text-align:center;">
+                    <div style="font-size:20px; line-height:1.2;">${icon}</div>
+                    <div style="font-size:12px; color:#555; margin-top:2px;">${label}</div>
+                    <div style="font-size:16px; font-weight:700; color:${COL[k][0]};">${val}</div></div>`;
+            const infoBox = `<div style="display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:12px;">
+                    ${stat('⏱️', 'মোট সময়', toBn(data.duration) + ' মিনিট', 'blue')}
+                    ${stat('📝', 'মোট প্রশ্ন', toBn(questions.length), 'purple')}
+                    ${stat('🎯', 'পূর্ণমান', toBn(fullMarks), 'green')}
+                    ${stat('✅', 'পাস মার্ক', toBn(quizSettings.passMark), 'orange')}
+                </div>
+                ${sectionMode ? `<div style="background:#e8eaf6; color:#283593; padding:8px 12px; border-radius:10px; font-size:13px; margin-bottom:12px;">📚 <b>সেকশন:</b> ${sections.map(x => escHtml(x.name) + ' (' + toBn(x.end - x.start + 1) + ')').join(' • ')}</div>` : ''}`;
 
-            // নতুন নিয়মাবলী: আগের ৫টা পয়েন্টের পর থেকে ক্রমিক নম্বর
-            let ruleNo = 5;
-            const rule = t => `<p>${toBn(++ruleNo)}. ${t}</p>`;
-            let extraRules = '';
-            if (sectionMode) extraRules += rule('<strong>সেকশন:</strong> পরীক্ষাটি বিষয় অনুযায়ী সেকশনে ভাগ করা। ওপরের সেকশনের নামে ক্লিক করলে সেই সেকশনের প্রথম প্রশ্নে যাবেন। যেকোনো সময় যেকোনো সেকশনে যেতে পারবেন। <b>সময় সব সেকশনের জন্য মিলিয়ে একটাই।</b>');
-            extraRules += rule('<strong>সময় শেষ হওয়ামাত্র</strong> আপনার পরীক্ষা নিজে থেকেই জমা হয়ে যাবে।');
-            extraRules += rule('নিচের <b>"I am ready to begin"</b> বোতামে ক্লিক করামাত্র <b>টাইমার চালু</b> হবে। তাই আগে থেকে তৈরি হয়ে নিন।');
-            extraRules += rule('উত্তর বেছে <b>"Save & Next"</b> চাপতে হবে। না চেপে অন্য প্রশ্নে চলে গেলে সেই উত্তর <b>ধরা হবে না</b>।');
-            extraRules += rule('<b>"Mark Review"</b> শুধু আপনার মনে রাখার জন্য। উত্তর বেছে Mark Review করলে সেই উত্তরও গণনায় ধরা হবে।');
-            extraRules += rule('বাছা উত্তরটির ওপর <b>আবার চাপ দিলে</b> উত্তর মুছে যাবে। এতে কোনো নম্বর কাটা হবে না। আগের প্রশ্নে ফিরতে <b>"Previous"</b> বোতাম আছে।');
-            extraRules += rule('পরীক্ষা চলাকালীন <b>পেজ রিফ্রেশ করবেন না, ব্যাক বোতাম চাপবেন না বা ব্রাউজার বন্ধ করবেন না।</b> করলে পরীক্ষা নষ্ট হতে পারে।');
-            extraRules += rule('<b>ফুলস্ক্রিন থেকে বেরোবেন না।</b> বেরোলে সতর্কবার্তা আসবে, "Return to Fullscreen" চেপে ফিরে আসুন।');
-            if (data.randomizeQuestions || data.randomizeOptions) extraRules += rule('প্রশ্ন বা অপশনের ক্রম <b>এলোমেলো</b> থাকতে পারে, তাই পাশের জনের সঙ্গে ক্রম মিলবে না।');
-            extraRules += rule('ফোনে কল এলে, স্ক্রিন লক হলে বা পেজ হঠাৎ বন্ধ হয়ে গেলে <b>একই লিংকে আবার ঢুকুন।</b> আপনার উত্তর ও পরীক্ষা যেখানে ছিল সেখান থেকেই চলবে, তবে <b>সময় চলতে থাকবে।</b>');
-            extraRules += rule('পরীক্ষা চলাকালীন <b>ইন্টারনেট চালু রাখুন</b> এবং ফোনে চার্জ আছে কিনা দেখে নিন।');
-            extraRules += rule('সাবমিটের পর আপনি <b>স্কোর, সঠিক-ভুলের হিসাব এবং প্রতিটি প্রশ্নের সমাধান ও ব্যাখ্যা</b> দেখতে পাবেন।');
+            const row = (n, t, k) => `<div style="display:flex; gap:10px; align-items:flex-start; background:${COL[k][1]}; border-left:4px solid ${COL[k][0]}; border-radius:8px; padding:9px 10px; margin-bottom:8px;">
+                    <span style="flex:none; min-width:24px; height:24px; border-radius:12px; background:${COL[k][0]}; color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; padding:0 3px;">${n === 'x' ? '%%N%%' : toBn(n)}</span>
+                    <span style="flex:1; min-width:0;">${t}</span></div>`;
+            const hd = (t, k) => `<div style="font-weight:700; color:${COL[k][0]}; margin:14px 0 8px; font-size:14px;">${t}</div>`;
+
+            const rule = (t, k) => row('x', t, k || 'blue');   // নম্বর পরে, দেখানোর ক্রম ধরে বসে
+
+            const core = row(1, `<strong>মোট সময় (Duration):</strong> <b style="color:#1565c0;">${data.duration} মিনিট</b>`, 'blue')
+                + row(2, `<strong>পাস মার্ক (Pass Mark):</strong> <b style="color:#e65100;">${quizSettings.passMark}</b>`, 'orange')
+                + row(3, `<strong>মার্কিং:</strong> প্রতিটি সঠিক উত্তরের জন্য <b style="color:#2e7d32;">+${quizSettings.posMark}</b> এবং ভুল উত্তরের জন্য <b style="color:#c62828;">-${quizSettings.negMark}</b> নম্বর কাটা যাবে`, 'green')
+                + row(4, 'ডানদিকের প্যালেট ব্যবহার করে যে কোনো প্রশ্নে যাওয়া যাবে', 'blue')
+                + row(5, '<strong>নতুন:</strong> স্ক্রিনে বামে/ডানে সোয়াইপ করে প্রশ্ন পরিবর্তন করা যাবে।', 'blue');
+
+            let btnRules = '', warnRules = '', tipRules = '';
+            if (sectionMode) btnRules += rule('<strong>সেকশন:</strong> পরীক্ষাটি বিষয় অনুযায়ী সেকশনে ভাগ করা। ওপরের সেকশনের নামে ক্লিক করলে সেই সেকশনের প্রথম প্রশ্নে যাবেন। যেকোনো সময় যেকোনো সেকশনে যেতে পারবেন। <b>সময় সব সেকশনের জন্য মিলিয়ে একটাই।</b>', 'purple');
+            warnRules += rule('<strong>সময় শেষ হওয়ামাত্র</strong> আপনার পরীক্ষা নিজে থেকেই জমা হয়ে যাবে।', 'red');
+            warnRules += rule('নিচের <b>"I am ready to begin"</b> বোতামে ক্লিক করামাত্র <b>টাইমার চালু</b> হবে। তাই আগে থেকে তৈরি হয়ে নিন।', 'red');
+            btnRules += rule('উত্তর বেছে <b>"Save & Next"</b> চাপতে হবে। না চেপে অন্য প্রশ্নে চলে গেলে সেই উত্তর <b>ধরা হবে না</b>।', 'purple');
+            btnRules += rule('<b>"Mark Review"</b> শুধু আপনার মনে রাখার জন্য। উত্তর বেছে Mark Review করলে সেই উত্তরও গণনায় ধরা হবে।', 'purple');
+            btnRules += rule('বাছা উত্তরটির ওপর <b>আবার চাপ দিলে</b> উত্তর মুছে যাবে। এতে কোনো নম্বর কাটা হবে না। আগের প্রশ্নে ফিরতে <b>"Previous"</b> বোতাম আছে।', 'purple');
+            warnRules += rule('পরীক্ষা চলাকালীন <b>পেজ রিফ্রেশ করবেন না, ব্যাক বোতাম চাপবেন না বা ব্রাউজার বন্ধ করবেন না।</b> করলে পরীক্ষা নষ্ট হতে পারে।', 'red');
+            warnRules += rule('<b>ফুলস্ক্রিন থেকে বেরোবেন না।</b> বেরোলে সতর্কবার্তা আসবে, "Return to Fullscreen" চেপে ফিরে আসুন।', 'red');
+            if (data.randomizeQuestions || data.randomizeOptions) tipRules += rule('প্রশ্ন বা অপশনের ক্রম <b>এলোমেলো</b> থাকতে পারে, তাই পাশের জনের সঙ্গে ক্রম মিলবে না।', 'orange');
+            tipRules += rule('ফোনে কল এলে, স্ক্রিন লক হলে বা পেজ হঠাৎ বন্ধ হয়ে গেলে <b>একই লিংকে আবার ঢুকুন।</b> আপনার উত্তর ও পরীক্ষা যেখানে ছিল সেখান থেকেই চলবে, তবে <b>সময় চলতে থাকবে।</b>', 'green');
+            tipRules += rule('পরীক্ষা চলাকালীন <b>ইন্টারনেট চালু রাখুন</b> এবং ফোনে চার্জ আছে কিনা দেখে নিন।', 'green');
+            tipRules += rule('সাবমিটের পর আপনি <b>স্কোর, সঠিক-ভুলের হিসাব এবং প্রতিটি প্রশ্নের সমাধান ও ব্যাখ্যা</b> দেখতে পাবেন।', 'green');
+
+            const dot = (cls, t) => `<span style="display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid #e0e0e0; border-radius:14px; padding:4px 10px; font-size:12px;"><span class="dot-icon ${cls}"></span>${t}</span>`;
 
             const instHTML = `
                 ${prevScoreMsg}
                 <div style="font-family: 'Roboto', sans-serif; font-size: 15px; line-height: 1.6; color:#333;">
-                    ${infoBox}
-                    <h3 style="margin-top:0; margin-bottom:10px; color:#0d47a1;">সাধারণ নির্দেশাবলী (Instructions):</h3>
-                    <p>১. <strong>মোট সময় (Duration):</strong> ${data.duration} মিনিট</p>
-                    <p>২. <strong>পাস মার্ক (Pass Mark):</strong> ${quizSettings.passMark}</p>
-                    <p>৩. <strong>মার্কিং:</strong> প্রতিটি সঠিক উত্তরের জন্য <b>+${quizSettings.posMark}</b> এবং ভুল উত্তরের জন্য <b>-${quizSettings.negMark}</b> নম্বর কাটা যাবে</p>
-                    <p>৪. ডানদিকের প্যালেট ব্যবহার করে যে কোনো প্রশ্নে যাওয়া যাবে</p>
-                    <p>৫. <strong>নতুন:</strong> স্ক্রিনে বামে/ডানে সোয়াইপ করে প্রশ্ন পরিবর্তন করা যাবে।</p>
-                    ${extraRules}
-                    
-                    <div style="background:#f9f9f9; padding:10px; border-radius:5px; margin-top:10px; font-size:13px;">
-                        <strong>কালার কোড (Legend):</strong>
-                        <ul class="legend-list" style="margin-top:5px;">
-                            <li><span class="dot-icon not-visited"></span> দেখেনি (Not Visited)</li>
-                            <li><span class="dot-icon not-answered"></span> উত্তর দেয়নি (Not Answered)</li>
-                            <li><span class="dot-icon answered"></span> উত্তর দিয়েছে (Answered)</li>
-                            <li><span class="dot-icon marked"></span> মার্ক করা (Marked for Review)</li>
-                        </ul>
+                    <div style="background:linear-gradient(135deg,#1565c0,#6a1b9a); color:#fff; border-radius:14px; padding:14px 16px; margin-bottom:12px;">
+                        <div style="font-size:17px; font-weight:700;">📋 সাধারণ নির্দেশাবলী</div>
+                        <div style="font-size:12px; opacity:.9;">General Instructions &mdash; শুরুর আগে মন দিয়ে পড়ুন</div>
                     </div>
-                    <p style="margin-top:16px; padding:10px 12px; background:#fff8e1; border-left:4px solid #ffb300; border-radius:4px;">
-                        আপনি প্রস্তুত থাকলে নিচের বোতামে ক্লিক করুন। <b>ক্লিক করামাত্র পরীক্ষা শুরু হবে।</b> শুভকামনা!
+                    ${infoBox}
+                    ${hd('📌 মূল তথ্য', 'blue')}
+                    ${core}
+                    ${hd('🔘 বোতাম ব্যবহার', 'purple')}
+                    ${btnRules}
+                    ${hd('⚠️ খুব গুরুত্বপূর্ণ সতর্কতা', 'red')}
+                    ${warnRules}
+                    ${hd('💡 জেনে রাখুন', 'green')}
+                    ${tipRules}
+                    <div style="background:#f5f5f5; padding:10px 12px; border-radius:10px; margin-top:12px; font-size:13px;">
+                        <strong>কালার কোড (Legend):</strong>
+                        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
+                            ${dot('not-visited', 'দেখেনি (Not Visited)')}
+                            ${dot('not-answered', 'উত্তর দেয়নি (Not Answered)')}
+                            ${dot('answered', 'উত্তর দিয়েছে (Answered)')}
+                            ${dot('marked', 'মার্ক করা (Marked for Review)')}
+                        </div>
+                    </div>
+                    <p style="margin:16px 0 4px; padding:12px 14px; background:linear-gradient(135deg,#fff8e1,#ffe0b2); border-left:5px solid #ff9800; border-radius:8px;">
+                        আপনি প্রস্তুত থাকলে নিচের বোতামে ক্লিক করুন। <b>ক্লিক করামাত্র পরীক্ষা শুরু হবে।</b> শুভকামনা! 🍀
                     </p>
                 </div>`;
+            let seq = 5;
+            const instHTMLNumbered = instHTML.replace(/%%N%%/g, () => toBn(++seq));
             
-            document.getElementById('instContent').innerHTML = instHTML;
+            document.getElementById('instContent').innerHTML = instHTMLNumbered;
             
             // --- FIX: Button disabled logic logic fixed ---
             // বাটন ডিজেবল থাকবে যতক্ষণ না চেকবক্সে ক্লিক করা হয়
@@ -417,8 +442,8 @@ function startTimer() {
 
 document.getElementById('pauseBtn').addEventListener('click', () => {
     const ca = document.querySelector('.content-area'); const b = document.getElementById('pauseBtn');
-    if(!isPaused) { clearInterval(timerInterval); isPaused=true; b.innerText="Resume"; b.style.background="#ff9800"; b.style.color="white"; ca.style.opacity='0'; saveState(); } 
-    else { startTimer(); isPaused=false; b.innerText="Pause"; b.style.background="white"; b.style.color="#007bff"; ca.style.opacity='1'; saveState(); }
+    if(!isPaused) { clearInterval(timerInterval); isPaused=true; b.innerText="Resume"; b.style.background="#ff9800"; b.style.color="white"; ca.style.opacity='0'; showPauseMsg(true); saveState(); } 
+    else { startTimer(); isPaused=false; b.innerText="Pause"; b.style.background="white"; b.style.color="#007bff"; ca.style.opacity='1'; showPauseMsg(false); saveState(); }
 });
 
 // --- SUBMIT & RESULT ANALYSIS ---
@@ -676,18 +701,13 @@ function tryRestoreAttempt() {
 
     if (st.submitted) { submitTest(true); return true; }   // সাবমিট করা রেজাল্ট আবার দেখানো (আবার জমা পড়ে না)
 
-    isPaused = !!st.isPaused;
-    timeLeft = isPaused ? (st.timeLeft || 0) : Math.max(0, Math.round((st.endTime - Date.now()) / 1000));
+    // Pause করা অবস্থায় বেরিয়ে গেলেও ফিরে এলে পরীক্ষা নিজে চালু হয় (প্রশ্ন ঢাকা বা সময় আটকে থাকে না); Pause-এ বাকি সময়টুকুই ধরা হয়
+    const wasPaused = !!st.isPaused;
+    isPaused = false;
+    timeLeft = wasPaused ? (st.timeLeft || 0) : Math.max(0, Math.round((st.endTime - Date.now()) / 1000));
     loadQuestion(currentIdx);
     if (timeLeft <= 0) { submitTest(); return true; }        // দূরে থাকতে সময় শেষ: নিজে জমা হবে
-    if (isPaused) {
-        const b = document.getElementById('pauseBtn');
-        b.innerText = 'Resume'; b.style.background = '#ff9800'; b.style.color = 'white';
-        document.querySelector('.content-area').style.opacity = '0';
-        document.getElementById('timerDisplay').innerText = parseInt(timeLeft / 60) + ':' + (timeLeft % 60 < 10 ? '0' : '') + (timeLeft % 60);
-    } else {
-        startTimer();
-    }
+    startTimer();
     // রিলোডে ফুলস্ক্রিন চলে যায়: যেসব ফোনে ফুলস্ক্রিন চলে, সেখানে ফেরার বোতাম দেখানো
     if (document.fullscreenEnabled && !document.fullscreenElement) document.getElementById('fullscreenOverlay').style.display = 'flex';
     keepAwake();
@@ -731,4 +751,16 @@ function goPortal() {
     } catch (e) {}
     history.go(-2);
     setTimeout(() => { if (document.referrer) location.href = document.referrer; else leavingPage = false; }, 500);
+}
+
+// Pause করা থাকলে ঢাকা পর্দায় কী করতে হবে তা লিখে দেখানো
+function showPauseMsg(on) {
+    let m = document.getElementById('pauseMsg');
+    if (!m) {
+        m = document.createElement('div'); m.id = 'pauseMsg';
+        m.style.cssText = 'position:fixed;left:0;right:0;top:42%;text-align:center;font-size:16px;font-weight:bold;color:#ff9800;z-index:5;padding:0 24px;display:none;';
+        m.textContent = '⏸ পরীক্ষা Pause করা আছে। চালু করতে ওপরের "Resume" বোতাম চাপুন।';
+        document.body.appendChild(m);
+    }
+    m.style.display = on ? 'block' : 'none';
 }
