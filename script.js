@@ -720,3 +720,10 @@ window.addEventListener('popstate', () => {
         leave();
     }
 });
+
+// "← টেস্ট সিরিজে ফিরুন": রেজাল্ট থেকে সরাসরি পোর্টালের আগের মেনুতে (নিশ্চিতকরণ ছাড়া, কারণ বোতামটা ইচ্ছা করেই চাপা)
+function goPortal() {
+    leavingPage = true;
+    history.go(-2);   // নিজের জোড়া ধাপ + পরীক্ষার ধাপ পেরিয়ে পোর্টাল
+    setTimeout(() => { if (document.referrer) location.href = document.referrer; else leavingPage = false; }, 500);
+}
