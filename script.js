@@ -724,6 +724,11 @@ window.addEventListener('popstate', () => {
 // "← টেস্ট সিরিজে ফিরুন": রেজাল্ট থেকে সরাসরি পোর্টালের আগের মেনুতে (নিশ্চিতকরণ ছাড়া, কারণ বোতামটা ইচ্ছা করেই চাপা)
 function goPortal() {
     leavingPage = true;
-    history.go(-2);   // নিজের জোড়া ধাপ + পরীক্ষার ধাপ পেরিয়ে পোর্টাল
+    // পোর্টাল লিংকের সঙ্গে ফেরার ঠিকানা (back) পাঠিয়েছে; একই সাইটের হলেই সেটা ব্যবহার
+    try {
+        const back = new URLSearchParams(location.search).get('back');
+        if (back && new URL(back, location.href).origin === location.origin) { location.replace(back); return; }
+    } catch (e) {}
+    history.go(-2);
     setTimeout(() => { if (document.referrer) location.href = document.referrer; else leavingPage = false; }, 500);
 }
