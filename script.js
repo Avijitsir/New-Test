@@ -44,8 +44,16 @@ function shuffleArray(array) {
 document.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     currentQuizId = urlParams.get('id');
+    // পোর্টালের "Reattempt": সেভ মুছে নতুন করে শুরু (রিলোডে যেন আবার না মোছে, তাই ঠিকানা থেকে চিহ্নটা সরানো হয়)
+    if (currentQuizId && urlParams.get('retake') === '1') {
+        try { localStorage.removeItem(stateKey()); } catch (e) {}
+        urlParams.delete('retake');
+        try { history.replaceState(null, '', location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '')); } catch (e) {}
+    }
+    const wantView = urlParams.get('view');
     if (currentQuizId && tryRestoreAttempt()) {
-        // আগের পরীক্ষা বা রেজাল্ট ফিরিয়ে আনা হয়েছে
+        // আগের পরীক্ষা বা রেজাল্ট ফিরিয়ে আনা হয়েছে; পোর্টালের "Solution" বোতাম থেকে এলে সরাসরি সমাধান
+        if (wantView === 'solution' && isSubmitted) switchTab('solution');
     } else if (currentQuizId) {
         document.getElementById('instContent').innerHTML = "<div style='text-align:center; padding:20px; color:#666;'>Loading Quiz Details... Please wait.</div>";
         loadQuizFromFirebase(currentQuizId);
