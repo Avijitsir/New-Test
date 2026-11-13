@@ -696,7 +696,8 @@ function tryRestoreAttempt() {
     let st = null;
     try { st = JSON.parse(localStorage.getItem(stateKey()) || 'null'); } catch (e) { st = null; }
     if (!st || st.v !== 1 || !st.questions || !st.questions.length || !st.status || !st.userAnswers) return false;
-    if (Date.now() - (st.savedAt || 0) > 24 * 3600 * 1000) { try { localStorage.removeItem(stateKey()); } catch (e) {} return false; }
+    // অসমাপ্ত পরীক্ষা ২৪ ঘণ্টা, জমা দেওয়া ফল ৯০ দিন
+    if (Date.now() - (st.savedAt || 0) > (st.submitted ? 90 : 1) * 24 * 3600 * 1000) { try { localStorage.removeItem(stateKey()); } catch (e) {} return false; }
 
     questions = st.questions; sections = st.sections || []; sectionMode = !!st.sectionMode;
     quizSettings = st.quizSettings || quizSettings; status = st.status; userAnswers = st.userAnswers;
