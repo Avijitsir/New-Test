@@ -286,6 +286,15 @@
             <span id="meta-msg" style="margin-left:8px; font-size:13px;"></span>
         </div>
 
+        <div style="background:#f5f3ff; border:1px solid #ddd6fe; border-radius:10px; padding:10px 12px; margin-bottom:12px;">
+            <b>🗂️ গ্রুপ বানান (যেমন WBPSC → Clerkship, Food SI)</b>
+            <div style="font-size:13px; color:#555; margin:4px 0 8px;">যে পরীক্ষাগুলো একটা আইকনের ভেতরে রাখতে চান, তাদের পাশে একই গ্রুপের নাম লিখুন। ফাঁকা রাখলে আগের মতোই আলাদা আইকন থাকবে। গ্রুপের আইকনের ছবির লিংক চাইলে নিচে দিন, না দিলে প্রথম পরীক্ষার আইকন বসবে।</div>
+            <div id="grp-list"></div>
+            <datalist id="grp-names"></datalist>
+            <button class="arr-mini" id="grp-save" onclick="saveGroups()">💾 গ্রুপ সেভ করুন</button>
+            <span id="grp-msg" style="margin-left:8px; font-size:13px;"></span>
+        </div>
+
         <div class="arr-bar">
             <button class="arr-save" id="arr-save" onclick="saveArrange()" disabled>💾 সেভ করুন</button>
             <button class="arr-cancel" id="arr-cancel" onclick="cancelArrange()" disabled>↩ বাতিল</button>
@@ -635,7 +644,54 @@
         });
     }
 
+    // ---- গ্রুপ ----
+    function renderGroups() {
+        const box = document.getElementById('grp-list'); if (!box) return;
+        if (box.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
+        const cats = [], seen = {};
+        allData.forEach(([k, v]) => { if (v && v.category && !seen[v.category]) { seen[v.category] = 1; cats.push(v.category); } });
+        const gOf = {}, gIcon = {};
+        allData.forEach(([k, v]) => { if (v && v.category) { if (v.group) gOf[v.category] = v.group; if (v.group && v.groupIcon) gIcon[v.group] = v.groupIcon; } });
+        const names = Object.keys(gIcon).concat(Object.values(gOf)).filter((x, i, a) => a.indexOf(x) === i);
+        document.getElementById('grp-names').innerHTML = names.map(n => '<option value="' + n.replace(/"/g, '&quot;') + '">').join('');
+        let h = '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:12px; font-weight:bold; color:#6b21a8; margin-bottom:4px;"><div>পরীক্ষা (আইকন)</div><div>গ্রুপের নাম</div></div>';
+        cats.forEach((cat, i) => {
+            h += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:5px; align-items:center;">' +
+                '<div style="font-size:13px;">' + cat.replace(/</g, '&lt;') + '</div>' +
+                '<input class="grp-in" data-cat="' + encodeURIComponent(cat) + '" list="grp-names" placeholder="ফাঁকা = আলাদা আইকন" value="' + (gOf[cat] || '').replace(/"/g, '&quot;') + '" style="padding:6px; border:1px solid #ccc; border-radius:6px; width:100%; box-sizing:border-box;"></div>';
+        });
+        if (names.length) {
+            h += '<div style="font-size:12px; font-weight:bold; color:#6b21a8; margin:10px 0 4px;">গ্রুপের আইকনের ছবির লিংক (ঐচ্ছিক)</div>';
+            names.forEach(n => {
+                h += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:5px; align-items:center;">' +
+                    '<div style="font-size:13px;">🗂️ ' + n.replace(/</g, '&lt;') + '</div>' +
+                    '<input class="grp-icon" data-g="' + encodeURIComponent(n) + '" placeholder="https://..." value="' + (gIcon[n] || '').replace(/"/g, '&quot;') + '" style="padding:6px; border:1px solid #ccc; border-radius:6px; width:100%; box-sizing:border-box;"></div>';
+            });
+        }
+        box.innerHTML = h;
+    }
+    function saveGroups() {
+        const btn = document.getElementById('grp-save'), msg = document.getElementById('grp-msg');
+        const gOfNew = {};
+        document.querySelectorAll('.grp-in').forEach(i => { gOfNew[decodeURIComponent(i.dataset.cat)] = i.value.trim(); });
+        const iconNew = {};
+        document.querySelectorAll('.grp-icon').forEach(i => { iconNew[decodeURIComponent(i.dataset.g)] = i.value.trim(); });
+        const upd = {};
+        allData.forEach(([k, v]) => {
+            if (!v || !v.category || !(v.category in gOfNew)) return;
+            const g = gOfNew[v.category];
+            upd['exams/' + k + '/group'] = g || null;
+            upd['exams/' + k + '/groupIcon'] = g ? (iconNew[g] || null) : null;
+        });
+        if (!Object.keys(upd).length) { msg.textContent = 'কিছু নেই'; return; }
+        btn.disabled = true; msg.textContent = 'সেভ হচ্ছে...';
+        db.ref().update(upd).then(() => { msg.textContent = '✅ সেভ হয়েছে'; })
+            .catch(e => { msg.textContent = '⚠️ হয়নি: ' + e.message; })
+            .then(() => { btn.disabled = false; });
+    }
+
     function renderArrange() {
+        renderGroups();
         if (arrDirty) return;   // সাজানোর মাঝখানে ডাটাবেসের বদলে কাজ নষ্ট হতে দেওয়া হবে না
         buildArrTree(); drawArr();
     }
@@ -763,6 +819,8 @@
                 upd['exams/' + ch.key + '/qCount'] = n;
                 upd['exams/' + ch.key + '/marks'] = +(n * pos).toFixed(2);
                 upd['exams/' + ch.key + '/mins'] = Number(q.duration) || 0;
+                upd['exams/' + ch.key + '/liveStart'] = Number(q.liveStart) || null;
+                upd['exams/' + ch.key + '/liveEnd'] = Number(q.liveEnd) || null;
                 done++;
             });
             return (Object.keys(upd).length ? db.ref().update(upd) : Promise.resolve()).then(() => {
