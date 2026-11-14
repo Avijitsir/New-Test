@@ -187,6 +187,16 @@
                         <label style="margin:0; cursor:pointer; display:flex; align-items:center; font-weight:bold;"><input type="checkbox" id="section-mode-check" style="width:auto; margin-right:5px;"> 📚 সেকশন অনুযায়ী ভাগ করুন (English, Math, GK ইত্যাদি আলাদা ট্যাব)</label>
                         <small style="display:block; margin-top:5px; color:#636e72;">চালু করলে পরীক্ষায় প্রতিটি প্রশ্নের "বিষয়" অনুযায়ী আলাদা সেকশন ট্যাব আসবে এবং রেজাল্টে সেকশন-ওয়ারি নম্বর দেখাবে। <b>বন্ধ রাখলে</b> সব প্রশ্ন একসঙ্গে "All Sections"-এ থাকবে।</small>
                     </div>
+                    <div style="margin-top:10px; background:#fff1f1; border:1px solid #ffc9c9; padding:10px; border-radius:8px;">
+                        <label style="margin:0; cursor:pointer; display:flex; align-items:center; font-weight:bold; color:#c62828;"><input type="checkbox" id="live-mode-check" style="width:auto; margin-right:5px;"> 🔴 লাইভ টেস্ট (নির্দিষ্ট সময়ের মধ্যে চালু থাকবে)</label>
+                        <div id="live-box" style="display:none; margin-top:10px;">
+                            <div class="row-grid">
+                                <div><label>🟢 শুরু:</label><input type="datetime-local" id="live-start"></div>
+                                <div><label>🔴 শেষ:</label><input type="datetime-local" id="live-end"></div>
+                            </div>
+                            <small style="display:block; margin-top:6px; color:#636e72;">এই সময়ের আগে পোর্টালে "শীঘ্রই শুরু" দেখাবে, চলাকালীন <b>LIVE</b> চিহ্ন, শেষ হলে কার্ড নিজে সরে যাবে (যারা দিয়েছে তারা শুধু নিজের ফল দেখতে পাবে)। <b>পোর্টালে প্রকাশে শুধু "Exam" ঘর দিলেই হবে</b>, টেস্টটি ওই পরীক্ষার ভেতরে আলাদা <b>"🔴 Live Test"</b> ট্যাবে দেখাবে (Tab/Menu লাগবে না)। শেষের সময় এলে মাঝখানের ছাত্রের পরীক্ষা <b>নিজে জমা</b> হবে। লাইভ চলাকালীন সমাধান বন্ধ থাকবে। সময় সার্ভারের ঘড়ি ধরে, ফোনের ঘড়ি বদলে লাভ নেই।</small>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="card card-settings" id="publish-card" style="border-top:4px solid #00b894;">
