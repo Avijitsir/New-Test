@@ -365,6 +365,25 @@ function delQ(i) {
     }
 }
 
+// পোর্টালের কার্ডে দেখানোর জন্য কুইজের ছোট তথ্য: প্রশ্ন সংখ্যা, পূর্ণমান, সময়
+function quizMetaNow() {
+    const n = currentQuestions.length;
+    const pos = Number(document.getElementById('quiz-pos-mark').value) || 1;
+    return { qCount: n, marks: +(n * pos).toFixed(2), mins: Number(document.getElementById('quiz-duration').value) || 0 };
+}
+// এই কুইজের লিংক যে যে পোর্টাল-এন্ট্রিতে আছে, সবার তথ্য নতুন করে বসায়
+function syncExamMeta(quizId, meta) {
+    return database.ref('exams').once('value').then(snap => {
+        const upd = {};
+        snap.forEach(ch => {
+            const v = ch.val() || {};
+            let id = null; try { id = new URL(v.link, location.href).searchParams.get('id'); } catch (e) {}
+            if (id === quizId) { upd['exams/' + ch.key + '/qCount'] = meta.qCount; upd['exams/' + ch.key + '/marks'] = meta.marks; upd['exams/' + ch.key + '/mins'] = meta.mins; }
+        });
+        return Object.keys(upd).length ? database.ref().update(upd) : null;
+    }).catch(() => null);
+}
+
 function saveQuizData() {
     if(!currentQuestions.length) return alert("কোনো প্রশ্ন নেই! আগে প্রশ্ন যোগ করুন।");
     const id = document.getElementById('quiz-id-input').value;
@@ -383,7 +402,7 @@ function saveQuizData() {
         markSaved();
         saveLastSettings();
         showQuizLink(id);
-        return publishToPortal(id, document.getElementById('quiz-title-input').value.trim());
+        return syncExamMeta(id, quizMetaNow()).then(() => publishToPortal(id, document.getElementById('quiz-title-input').value.trim()));
     }).then(portalMsg => {
         alert("কুইজ সেভ হয়েছে!" + (portalMsg || ""));
     }).catch(err => {
@@ -549,6 +568,7 @@ function publishToPortal(quizId, title) {
             link: link,
             locked: existing ? (existing[1].locked || false) : false
         };
+        Object.assign(payload, quizMetaNow());
 
         let op, newKey = key;
         if (key) { op = database.ref('exams/' + key).update(payload); }
