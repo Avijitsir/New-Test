@@ -20,6 +20,7 @@ let isSubmitted = false;
 let timerInterval;
 let timeLeft = 90 * 60; 
 let isPaused = false;
+let autoPaused = false;   // বেরিয়ে যাওয়ায় নিজে থেকে থেমেছে (ছাত্র নিজে Pause দেয়নি)
 let filteredIndices = [];
 let quizSettings = { passMark: 30, posMark: 1, negMark: 0.33 };
 let currentQuizId = null;
@@ -46,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
     currentQuizId = urlParams.get('id');
     // পোর্টালের "Reattempt": সেভ মুছে নতুন করে শুরু (রিলোডে যেন আবার না মোছে, তাই ঠিকানা থেকে চিহ্নটা সরানো হয়)
     if (currentQuizId && urlParams.get('retake') === '1') {
-        try { localStorage.removeItem(stateKey()); } catch (e) {}
+        try { localStorage.removeItem(stateKey()); localStorage.removeItem('exam_tick_' + currentQuizId); } catch (e) {}
         urlParams.delete('retake');
         try { history.replaceState(null, '', location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '')); } catch (e) {}
     }
@@ -220,7 +221,7 @@ function loadQuizFromFirebase(quizId) {
             warnRules += rule('পরীক্ষা চলাকালীন <b>পেজ রিফ্রেশ করবেন না, ব্যাক বোতাম চাপবেন না বা ব্রাউজার বন্ধ করবেন না।</b> করলে পরীক্ষা নষ্ট হতে পারে।', 'red');
             warnRules += rule('<b>ফুলস্ক্রিন থেকে বেরোবেন না।</b> বেরোলে সতর্কবার্তা আসবে, "Return to Fullscreen" চেপে ফিরে আসুন।', 'red');
             if (data.randomizeQuestions || data.randomizeOptions) tipRules += rule('প্রশ্ন বা অপশনের ক্রম <b>এলোমেলো</b> থাকতে পারে, তাই পাশের জনের সঙ্গে ক্রম মিলবে না।', 'orange');
-            tipRules += rule('ফোনে কল এলে, স্ক্রিন লক হলে বা পেজ হঠাৎ বন্ধ হয়ে গেলে <b>একই লিংকে আবার ঢুকুন।</b> আপনার উত্তর ও পরীক্ষা যেখানে ছিল সেখান থেকেই চলবে, তবে <b>সময় চলতে থাকবে।</b>', 'green');
+            tipRules += rule('ফোনে কল এলে, স্ক্রিন লক হলে, অন্য অ্যাপে গেলে বা পেজ বন্ধ হয়ে গেলে <b>পরীক্ষা নিজে থেকে থেমে যাবে এবং সময়ও থামবে।</b> ফিরে এসে (পেজ বন্ধ হলে একই লিংকে আবার ঢুকে) <b>"Resume"</b> চাপুন। উত্তর ও সময় যেখানে ছিল সেখান থেকেই চলবে।', 'green');
             tipRules += rule('পরীক্ষা চলাকালীন <b>ইন্টারনেট চালু রাখুন</b> এবং ফোনে চার্জ আছে কিনা দেখে নিন।', 'green');
             tipRules += rule('সাবমিটের পর আপনি <b>স্কোর, সঠিক-ভুলের হিসাব এবং প্রতিটি প্রশ্নের সমাধান ও ব্যাখ্যা</b> দেখতে পাবেন।', 'green');
 
@@ -438,6 +439,8 @@ function tick() {
     timeLeft = Math.max(0, Math.round((endTime - Date.now()) / 1000));
     const m = parseInt(timeLeft / 60), s = parseInt(timeLeft % 60);
     document.getElementById('timerDisplay').innerText = `${m}:${s<10?'0'+s:s}`;
+    // বাকি সময় প্রতি সেকেন্ডে ছোট করে লেখা থাকে: হঠাৎ পেজ বন্ধ হলেও ঠিক ওই মুহূর্তের সময় মনে থাকে
+    if (currentQuizId && examStarted && !isSubmitted) { try { localStorage.setItem('exam_tick_' + currentQuizId, JSON.stringify({ t: Date.now(), left: timeLeft })); } catch (e) {} }
     if (timeLeft <= 0) { clearInterval(timerInterval); submitTest(); }
 }
 
@@ -448,11 +451,25 @@ function startTimer() {
     if (timeLeft > 0) timerInterval = setInterval(tick, 1000);
 }
 
-document.getElementById('pauseBtn').addEventListener('click', () => {
-    const ca = document.querySelector('.content-area'); const b = document.getElementById('pauseBtn');
-    if(!isPaused) { clearInterval(timerInterval); isPaused=true; b.innerText="Resume"; b.style.background="#ff9800"; b.style.color="white"; ca.style.opacity='0'; showPauseMsg(true); saveState(); } 
-    else { startTimer(); isPaused=false; b.innerText="Pause"; b.style.background="white"; b.style.color="#007bff"; ca.style.opacity='1'; showPauseMsg(false); saveState(); }
-});
+function pauseExam(auto) {
+    if (isPaused || !examStarted || isSubmitted) return;
+    tick();                                  // বাকি সময় ঠিক এই মুহূর্তের করে নেওয়া
+    if (isSubmitted) return;                 // সময় শেষ হলে tick নিজেই জমা দেয়
+    clearInterval(timerInterval); isPaused = true; autoPaused = !!auto;
+    const b = document.getElementById('pauseBtn');
+    b.innerText = "Resume"; b.style.background = "#ff9800"; b.style.color = "white";
+    document.querySelector('.content-area').style.opacity = '0';
+    showPauseMsg(true, !!auto); saveState();
+}
+function resumeExam() {
+    if (!isPaused) return;
+    startTimer(); isPaused = false; autoPaused = false;
+    const b = document.getElementById('pauseBtn');
+    b.innerText = "Pause"; b.style.background = "white"; b.style.color = "#007bff";
+    document.querySelector('.content-area').style.opacity = '1';
+    showPauseMsg(false); saveState();
+}
+document.getElementById('pauseBtn').addEventListener('click', () => { if (isPaused) resumeExam(); else pauseExam(false); });
 
 // --- SUBMIT & RESULT ANALYSIS ---
 function submitTest(fromRestore) {
@@ -685,11 +702,13 @@ function releaseWake() { try { if (wakeLock) wakeLock.release(); } catch (e) {} 
 
 // ফোন আনলক বা কল শেষে ট্যাবে ফিরলে: সময় ধরতা ঠিক করা ও স্ক্রিন আবার জাগিয়ে রাখা
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible' || !examStarted || isSubmitted) return;
+    if (!examStarted || isSubmitted) return;
+    if (document.visibilityState === 'hidden') { pauseExam(true); return; }   // কল, স্ক্রিন লক, অন্য অ্যাপ: পরীক্ষা ও সময় নিজে থেমে যায়
     keepAwake();
-    if (!isPaused) tick();
 });
-document.getElementById('returnFsBtn').addEventListener('click', () => keepAwake());
+window.addEventListener('pagehide', () => { pauseExam(true); });
+// বেরিয়ে যাওয়ার পর "Return to Fullscreen" চাপলে নিজে থেমে-যাওয়া পরীক্ষা সঙ্গে সঙ্গে চালু হয়
+document.getElementById('returnFsBtn').addEventListener('click', () => { keepAwake(); if (isPaused && autoPaused) resumeExam(); });
 
 // আগের অসমাপ্ত পরীক্ষা বা সাবমিট করা রেজাল্ট থাকলে ফিরিয়ে আনে। ফিরিয়ে আনলে true
 function tryRestoreAttempt() {
@@ -710,13 +729,18 @@ function tryRestoreAttempt() {
 
     if (st.submitted) { submitTest(true); return true; }   // সাবমিট করা রেজাল্ট আবার দেখানো (আবার জমা পড়ে না)
 
-    // Pause করা অবস্থায় বেরিয়ে গেলেও ফিরে এলে পরীক্ষা নিজে চালু হয় (প্রশ্ন ঢাকা বা সময় আটকে থাকে না); Pause-এ বাকি সময়টুকুই ধরা হয়
-    const wasPaused = !!st.isPaused;
+    // বেরিয়ে যাওয়ার সময় পরীক্ষা থেমে যায়: ফিরলে ঠিক ওই মুহূর্তের বাকি সময় নিয়ে থামা অবস্থাতেই ফেরে, "Resume" চাপলে চলে
+    let left;
+    if (st.isPaused) left = st.timeLeft || 0;
+    else {
+        let tk = null; try { tk = JSON.parse(localStorage.getItem('exam_tick_' + currentQuizId) || 'null'); } catch (e) {}
+        left = (tk && typeof tk.left === 'number' && tk.t >= (st.savedAt || 0) - 2000) ? tk.left : Math.max(0, Math.round((st.endTime - Date.now()) / 1000));
+    }
     isPaused = false;
-    timeLeft = wasPaused ? (st.timeLeft || 0) : Math.max(0, Math.round((st.endTime - Date.now()) / 1000));
+    timeLeft = left; endTime = Date.now() + timeLeft * 1000;
     loadQuestion(currentIdx);
-    if (timeLeft <= 0) { submitTest(); return true; }        // দূরে থাকতে সময় শেষ: নিজে জমা হবে
-    startTimer();
+    if (timeLeft <= 0) { submitTest(); return true; }
+    pauseExam(true);
     // রিলোডে ফুলস্ক্রিন চলে যায়: যেসব ফোনে ফুলস্ক্রিন চলে, সেখানে ফেরার বোতাম দেখানো
     if (document.fullscreenEnabled && !document.fullscreenElement) document.getElementById('fullscreenOverlay').style.display = 'flex';
     keepAwake();
@@ -725,7 +749,7 @@ function tryRestoreAttempt() {
 
 // "Close & Re-attempt": সেভ করা অবস্থা মুছে নতুন করে শুরু
 function retakeTest() {
-    try { localStorage.removeItem(stateKey()); } catch (e) {}
+    try { localStorage.removeItem(stateKey()); localStorage.removeItem('exam_tick_' + currentQuizId); } catch (e) {}
     location.reload();
 }
 
@@ -763,13 +787,14 @@ function goPortal() {
 }
 
 // Pause করা থাকলে ঢাকা পর্দায় কী করতে হবে তা লিখে দেখানো
-function showPauseMsg(on) {
+function showPauseMsg(on, auto) {
     let m = document.getElementById('pauseMsg');
     if (!m) {
         m = document.createElement('div'); m.id = 'pauseMsg';
         m.style.cssText = 'position:fixed;left:0;right:0;top:42%;text-align:center;font-size:16px;font-weight:bold;color:#ff9800;z-index:5;padding:0 24px;display:none;';
-        m.textContent = '⏸ পরীক্ষা Pause করা আছে। চালু করতে ওপরের "Resume" বোতাম চাপুন।';
         document.body.appendChild(m);
     }
+    m.innerHTML = auto ? '⏸ আপনি পরীক্ষার পেজ থেকে বেরিয়েছিলেন, তাই পরীক্ষা ও সময় থেমে আছে।<br><span style="font-weight:500; color:#555;">চালু করতে ওপরের "Resume" বোতাম চাপুন।</span>'
+                       : '⏸ পরীক্ষা Pause করা আছে। চালু করতে ওপরের "Resume" বোতাম চাপুন।';
     m.style.display = on ? 'block' : 'none';
 }
