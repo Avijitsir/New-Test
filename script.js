@@ -20,6 +20,7 @@ let isSubmitted = false;
 let timerInterval;
 let timeLeft = 90 * 60; 
 let isPaused = false;
+let liveInfo = null;      // লাইভ টেস্ট হলে {start, end, off} (সার্ভারের ঘড়ির হিসাবে)
 let autoPaused = false;   // বেরিয়ে যাওয়ায় নিজে থেকে থেমেছে (ছাত্র নিজে Pause দেয়নি)
 let filteredIndices = [];
 let quizSettings = { passMark: 30, posMark: 1, negMark: 0.33 };
@@ -110,6 +111,14 @@ function setupSwipe(elementId, onSwipeRight, onSwipeLeft) {
 
 function loadQuizFromFirebase(quizId) {
     database.ref('quizzes/' + quizId).once('value').then((snapshot) => {
+        // লাইভ টেস্ট হলে সার্ভারের ঘড়ির সঙ্গে ফোনের ঘড়ির ফারাক জেনে নেওয়া (ফোনের সময় বদলে ফাঁকি আটকাতে)
+        const d0 = snapshot.val();
+        if (d0 && Number(d0.liveStart) && Number(d0.liveEnd)) {
+            const mk = off => { liveInfo = { start: Number(d0.liveStart), end: Number(d0.liveEnd), off: Number(off) || 0 }; return snapshot; };
+            return database.ref('.info/serverTimeOffset').once('value').then(o => mk(o.val())).catch(() => mk(0));
+        }
+        return snapshot;
+    }).then((snapshot) => {
         const data = snapshot.val();
         if (data && data.questions) {
             // 1. Load Settings
@@ -264,6 +273,7 @@ function loadQuizFromFirebase(quizId) {
             // --- FIX: Button disabled logic logic fixed ---
             // বাটন ডিজেবল থাকবে যতক্ষণ না চেকবক্সে ক্লিক করা হয়
             document.getElementById('startTestBtn').disabled = false;
+            if (liveInfo) applyLiveGate();
         } else {
             document.getElementById('instContent').innerHTML = "Quiz not found or invalid.";
         }
@@ -271,6 +281,11 @@ function loadQuizFromFirebase(quizId) {
 }
 
 document.getElementById('startTestBtn').addEventListener('click', () => {
+    if (liveInfo) {
+        const remain = Math.floor((liveInfo.end - nowSrv()) / 1000);
+        if (remain <= 0) { alert('এই লাইভ টেস্ট শেষ হয়ে গেছে।'); return; }
+        timeLeft = Math.min(timeLeft, remain);   // লাইভ শেষের সময়ের পরে পরীক্ষা চলবে না
+    }
     document.getElementById('instructionScreen').style.display = 'none';
     document.getElementById('quizMainArea').style.display = 'flex'; 
     if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
@@ -278,6 +293,7 @@ document.getElementById('startTestBtn').addEventListener('click', () => {
     loadQuestion(0);
     startTimer();
     keepAwake();
+    if (liveInfo) startLiveWatch();
     saveState();
 });
 
@@ -535,6 +551,7 @@ function submitTest(fromRestore) {
     applyFilter('all');
     saveState();
     releaseWake();
+    if (liveInfo) applyLiveLock();
 }
 
 function applyFilter(t) {
@@ -656,6 +673,7 @@ function loadResultQuestion(realIdx) {
 }
 
 function switchTab(tabName) {
+    if (tabName === 'solution' && typeof liveLocked === 'function' && liveLocked()) return;   // লাইভ চলাকালীন সমাধান বন্ধ
     document.getElementById('btn-score').classList.remove('active');
     document.getElementById('btn-solution').classList.remove('active');
     document.getElementById('btn-' + tabName).classList.add('active');
@@ -683,7 +701,7 @@ function saveState() {
     try {
         localStorage.setItem(stateKey(), JSON.stringify({
             v: 1, savedAt: Date.now(),
-            questions: questions, sections: sections, sectionMode: sectionMode, quizSettings: quizSettings,
+            questions: questions, sections: sections, sectionMode: sectionMode, quizSettings: quizSettings, live: liveInfo,
             status: status, userAnswers: userAnswers, currentIdx: currentIdx,
             endTime: endTime, timeLeft: timeLeft, isPaused: isPaused, submitted: isSubmitted
         }));
@@ -719,6 +737,7 @@ function tryRestoreAttempt() {
     if (Date.now() - (st.savedAt || 0) > (st.submitted ? 90 : 1) * 24 * 3600 * 1000) { try { localStorage.removeItem(stateKey()); } catch (e) {} return false; }
 
     questions = st.questions; sections = st.sections || []; sectionMode = !!st.sectionMode;
+    liveInfo = st.live || null;
     quizSettings = st.quizSettings || quizSettings; status = st.status; userAnswers = st.userAnswers;
     currentIdx = Math.min(Math.max(st.currentIdx || 0, 0), questions.length - 1);
     document.getElementById('dispPosMark').innerText = '+' + quizSettings.posMark;
@@ -727,7 +746,7 @@ function tryRestoreAttempt() {
     document.getElementById('instructionScreen').style.display = 'none';
     document.getElementById('quizMainArea').style.display = 'flex';
 
-    if (st.submitted) { submitTest(true); return true; }   // সাবমিট করা রেজাল্ট আবার দেখানো (আবার জমা পড়ে না)
+    if (st.submitted) { submitTest(true); if (liveInfo) startLiveWatch(); return true; }   // সাবমিট করা রেজাল্ট আবার দেখানো (আবার জমা পড়ে না)
 
     // বেরিয়ে যাওয়ার সময় পরীক্ষা থেমে যায়: ফিরলে ঠিক ওই মুহূর্তের বাকি সময় নিয়ে থামা অবস্থাতেই ফেরে, "Resume" চাপলে চলে
     let left;
@@ -736,10 +755,13 @@ function tryRestoreAttempt() {
         let tk = null; try { tk = JSON.parse(localStorage.getItem('exam_tick_' + currentQuizId) || 'null'); } catch (e) {}
         left = (tk && typeof tk.left === 'number' && tk.t >= (st.savedAt || 0) - 2000) ? tk.left : Math.max(0, Math.round((st.endTime - Date.now()) / 1000));
     }
+    if (liveInfo && nowSrv() >= liveInfo.end) left = 0;      // লাইভ শেষ: ফিরেই জমা
+    if (liveInfo && liveInfo.end - nowSrv() < left * 1000) left = Math.max(0, Math.floor((liveInfo.end - nowSrv()) / 1000));
     isPaused = false;
     timeLeft = left; endTime = Date.now() + timeLeft * 1000;
     loadQuestion(currentIdx);
     if (timeLeft <= 0) { submitTest(); return true; }
+    if (liveInfo) startLiveWatch();
     pauseExam(true);
     // রিলোডে ফুলস্ক্রিন চলে যায়: যেসব ফোনে ফুলস্ক্রিন চলে, সেখানে ফেরার বোতাম দেখানো
     if (document.fullscreenEnabled && !document.fullscreenElement) document.getElementById('fullscreenOverlay').style.display = 'flex';
@@ -797,4 +819,66 @@ function showPauseMsg(on, auto) {
     m.innerHTML = auto ? '⏸ আপনি পরীক্ষার পেজ থেকে বেরিয়েছিলেন, তাই পরীক্ষা ও সময় থেমে আছে।<br><span style="font-weight:500; color:#555;">চালু করতে ওপরের "Resume" বোতাম চাপুন।</span>'
                        : '⏸ পরীক্ষা Pause করা আছে। চালু করতে ওপরের "Resume" বোতাম চাপুন।';
     m.style.display = on ? 'block' : 'none';
+}
+
+
+// =====================================================================
+//  🔴 লাইভ টেস্ট: নির্দিষ্ট সময়ের মধ্যেই চালু, শেষ হলে নিজে জমা, চলাকালীন সমাধান বন্ধ
+// =====================================================================
+let liveTimer = null;
+function nowSrv() { return Date.now() + (liveInfo ? liveInfo.off : 0); }
+function liveLocked() { return !!liveInfo && nowSrv() < liveInfo.end; }
+function fmtDT(ms) { return new Date(ms).toLocaleString('bn-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }); }
+function fmtCd(s) {
+    const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+    if (d > 0) return d + ' দিন ' + h + ' ঘণ্টা';
+    if (h > 0) return h + ' ঘণ্টা ' + m + ' মিনিট';
+    return m + ' মিনিট ' + x + ' সেকেন্ড';
+}
+function startLiveWatch() { clearInterval(liveTimer); liveTimer = setInterval(liveWatch, 1000); liveWatch(); }
+function liveWatch() {
+    if (!liveInfo) return;
+    if (examStarted && !isSubmitted && nowSrv() >= liveInfo.end) { submitTest(); return; }   // Pause থাকলেও লাইভ শেষে জমা
+    applyLiveLock();
+    if (isSubmitted && !liveLocked()) clearInterval(liveTimer);
+}
+function applyLiveLock() {
+    if (!liveInfo || !isSubmitted) return;
+    const locked = liveLocked();
+    const sol = document.getElementById('btn-solution'), vs = document.getElementById('viewSolBtn'), re = document.getElementById('reattemptBtn');
+    if (sol) sol.style.display = locked ? 'none' : '';
+    if (vs) vs.style.display = locked ? 'none' : '';
+    if (re) re.style.display = 'none';          // লাইভ টেস্টে Reattempt নেই
+    let n = document.getElementById('liveLockNote');
+    if (!n) {
+        n = document.createElement('div'); n.id = 'liveLockNote';
+        n.style.cssText = 'margin:12px 0; padding:10px 12px; background:#ffebee; border-left:4px solid #e53935; border-radius:6px; font-size:14px; color:#b71c1c; text-align:left;';
+        const host = document.querySelector('#tab-score-view .score-grid'); if (host) host.insertAdjacentElement('afterend', n);
+    }
+    n.style.display = locked ? 'block' : 'none';
+    n.innerHTML = '🔴 লাইভ টেস্ট চলছে। <b>সমাধান ও ব্যাখ্যা লাইভ শেষের পরে</b> দেখা যাবে (শেষ হবে: ' + fmtDT(liveInfo.end) + ')। তখন এই পাতায় আবার আসুন।';
+    if (locked && document.getElementById('tab-solution-view').style.display !== 'none') switchTab('score');
+}
+// নির্দেশাবলীর পাতায়: শুরুর আগে অপেক্ষা, চলাকালীন ব্যানার, শেষ হলে বন্ধ
+function applyLiveGate() {
+    const btn = document.getElementById('startTestBtn'), box = document.getElementById('instContent');
+    const n = nowSrv();
+    if (n >= liveInfo.end) {
+        box.innerHTML = '<div style="text-align:center; padding:40px 16px;"><div style="font-size:44px;">🏁</div><h3 style="color:#c62828;">এই লাইভ টেস্ট শেষ হয়ে গেছে</h3><p style="color:#555;">শেষ হয়েছে: ' + fmtDT(liveInfo.end) + '<br>নতুন লাইভ টেস্টের জন্য পোর্টালে নজর রাখুন।</p></div>';
+        btn.disabled = true; return;
+    }
+    if (n < liveInfo.start) {
+        btn.disabled = true;
+        box.insertAdjacentHTML('afterbegin', '<div style="background:linear-gradient(135deg,#fff3e0,#ffe0b2); border-left:5px solid #fb8c00; border-radius:10px; padding:12px 14px; margin-bottom:12px;">⏳ <b>লাইভ টেস্ট এখনো শুরু হয়নি</b><br>শুরু হবে: <b>' + fmtDT(liveInfo.start) + '</b><br><span id="liveCd" style="font-size:22px; font-weight:700; color:#e65100;"></span><br><small>নিচের নির্দেশাবলী এখনই পড়ে রাখুন। সময় হলে "I am ready to begin" নিজে চালু হবে।</small></div>');
+        const cd = document.getElementById('liveCd');
+        const t = setInterval(() => {
+            const r = Math.ceil((liveInfo.start - nowSrv()) / 1000);
+            if (r <= 0) { clearInterval(t); location.reload(); return; }
+            cd.textContent = fmtCd(r);
+        }, 1000);
+        cd.textContent = fmtCd(Math.ceil((liveInfo.start - n) / 1000));
+        return;
+    }
+    const remain = Math.floor((liveInfo.end - n) / 1000);
+    box.insertAdjacentHTML('afterbegin', '<div style="background:linear-gradient(135deg,#ffebee,#ffcdd2); border-left:5px solid #e53935; border-radius:10px; padding:12px 14px; margin-bottom:12px;">🔴 <b>LIVE TEST</b><br>লাইভ শেষ হবে: <b>' + fmtDT(liveInfo.end) + '</b> (আর ' + fmtCd(remain) + ' বাকি)<br><small>শেষের সময় এলে আপনার পরীক্ষা <b>নিজে থেকে জমা</b> হয়ে যাবে। লাইভ চলাকালীন সমাধান দেখা যাবে না, শেষের পরে দেখা যাবে। Reattempt নেই।</small></div>');
 }
