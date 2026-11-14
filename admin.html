@@ -279,6 +279,13 @@
         <div class="section-title">↕️ ক্রম সাজান (Arrange Order)</div>
         <p style="margin-top:0; color:#636e72;">নামের পাশের <b>⠿</b> ধরে টেনে জায়গা বদলান। পরীক্ষা, ট্যাব, মেনু ও চ্যাপ্টার, সবই এখানে। সাজানো শেষ হলে ওপরের <b>সেভ</b> চাপুন, তখনই পোর্টালে বদলাবে। নতুন যোগ করা জিনিস সবার শেষে আসে।</p>
 
+        <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; padding:10px 12px; margin-bottom:12px;">
+            <b>📊 পোর্টালের কার্ডে প্রশ্ন সংখ্যা, নম্বর ও সময় দেখানো</b>
+            <div style="font-size:13px; color:#555; margin:4px 0 8px;">নতুন বা সেভ করা কুইজের তথ্য নিজে থেকে বসে যায়। <b>আগের সব পরীক্ষার</b> তথ্য একবার এই বোতামে বসিয়ে নিন।</div>
+            <button class="arr-mini" id="meta-btn" onclick="backfillMeta()">📊 সব পরীক্ষার তথ্য আপডেট করুন</button>
+            <span id="meta-msg" style="margin-left:8px; font-size:13px;"></span>
+        </div>
+
         <div class="arr-bar">
             <button class="arr-save" id="arr-save" onclick="saveArrange()" disabled>💾 সেভ করুন</button>
             <button class="arr-cancel" id="arr-cancel" onclick="cancelArrange()" disabled>↩ বাতিল</button>
@@ -740,6 +747,30 @@
     }
 
     // সব বদল একসঙ্গে সেভ (একটাই লেখা)
+    // সব পোর্টাল-এন্ট্রির জন্য কুইজ থেকে প্রশ্ন সংখ্যা, পূর্ণমান ও সময় বসানো (একবারেই)
+    function backfillMeta() {
+        const btn = document.getElementById('meta-btn'), msg = document.getElementById('meta-msg');
+        btn.disabled = true; msg.textContent = 'চলছে...';
+        Promise.all([db.ref('exams').once('value'), db.ref('quizzes').once('value')]).then(([ex, qz]) => {
+            const quizzes = qz.val() || {}, upd = {}; let done = 0, miss = 0;
+            ex.forEach(ch => {
+                const v = ch.val() || {};
+                let id = null; try { id = new URL(v.link, location.href).searchParams.get('id'); } catch (e) {}
+                const q = id && quizzes[id];
+                if (!q || !q.questions) { miss++; return; }
+                const n = Array.isArray(q.questions) ? q.questions.length : Object.keys(q.questions).length;
+                const pos = Number(q.posMark) || 1;
+                upd['exams/' + ch.key + '/qCount'] = n;
+                upd['exams/' + ch.key + '/marks'] = +(n * pos).toFixed(2);
+                upd['exams/' + ch.key + '/mins'] = Number(q.duration) || 0;
+                done++;
+            });
+            return (Object.keys(upd).length ? db.ref().update(upd) : Promise.resolve()).then(() => {
+                msg.textContent = '✅ ' + done + 'টির তথ্য বসেছে' + (miss ? ' (' + miss + 'টির কুইজ পাওয়া যায়নি)' : '');
+            });
+        }).catch(e => { msg.textContent = '⚠️ হয়নি: ' + e.message; }).then(() => { btn.disabled = false; });
+    }
+
     function saveArrange() {
         if (!arrDirty) return;
         const u = {};
