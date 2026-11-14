@@ -91,6 +91,7 @@ function createNewQuiz() {
     document.getElementById('quiz-title-input').value = '';
     applyLastSettings(); // সময়, পাস মার্ক, নম্বর, Shuffle: শেষবারের মান (না থাকলে ফাঁকা)
     document.getElementById('section-mode-check').checked = false; // sections: always OFF for a new quiz (All Sections)
+    setLiveUI(null, null);                                          // লাইভ: নতুন কুইজে বন্ধ
     clearInputs();
     document.getElementById('quiz-id-input').value = editingQuizId;
     document.getElementById('share-link-box').style.display = 'none';
@@ -160,6 +161,7 @@ function editQuiz(id) {
         document.getElementById('rand-question-check').checked = d.randomizeQuestions || false;
         document.getElementById('rand-option-check').checked = d.randomizeOptions || false;
         document.getElementById('section-mode-check').checked = d.sectionMode || false;
+        setLiveUI(d.liveStart, d.liveEnd);
         currentQuestions = d.questions || [];
         editQIndex = -1;
         clearInputs();
@@ -369,7 +371,13 @@ function delQ(i) {
 function quizMetaNow() {
     const n = currentQuestions.length;
     const pos = Number(document.getElementById('quiz-pos-mark').value) || 1;
-    return { qCount: n, marks: +(n * pos).toFixed(2), mins: Number(document.getElementById('quiz-duration').value) || 0 };
+    const lv = readLiveQuiet();
+    return { qCount: n, marks: +(n * pos).toFixed(2), mins: Number(document.getElementById('quiz-duration').value) || 0, liveStart: lv ? lv.start : null, liveEnd: lv ? lv.end : null };
+}
+function readLiveQuiet() {
+    if (!document.getElementById('live-mode-check').checked) return null;
+    const s = new Date(document.getElementById('live-start').value).getTime(), e = new Date(document.getElementById('live-end').value).getTime();
+    return (s && e && e > s) ? { start: s, end: e } : null;
 }
 // এই কুইজের লিংক যে যে পোর্টাল-এন্ট্রিতে আছে, সবার তথ্য নতুন করে বসায়
 function syncExamMeta(quizId, meta) {
@@ -378,15 +386,43 @@ function syncExamMeta(quizId, meta) {
         snap.forEach(ch => {
             const v = ch.val() || {};
             let id = null; try { id = new URL(v.link, location.href).searchParams.get('id'); } catch (e) {}
-            if (id === quizId) { upd['exams/' + ch.key + '/qCount'] = meta.qCount; upd['exams/' + ch.key + '/marks'] = meta.marks; upd['exams/' + ch.key + '/mins'] = meta.mins; }
+            if (id === quizId) { upd['exams/' + ch.key + '/qCount'] = meta.qCount; upd['exams/' + ch.key + '/marks'] = meta.marks; upd['exams/' + ch.key + '/mins'] = meta.mins; upd['exams/' + ch.key + '/liveStart'] = meta.liveStart; upd['exams/' + ch.key + '/liveEnd'] = meta.liveEnd; }
         });
         return Object.keys(upd).length ? database.ref().update(upd) : null;
     }).catch(() => null);
 }
 
+// ---- লাইভ টেস্ট: শুরু ও শেষের সময় ----
+function toLocalInput(ms) {
+    if (!ms) return '';
+    const d = new Date(Number(ms)), p = n => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function setLiveUI(start, end) {
+    const on = !!(Number(start) && Number(end));
+    document.getElementById('live-mode-check').checked = on;
+    document.getElementById('live-start').value = on ? toLocalInput(start) : '';
+    document.getElementById('live-end').value = on ? toLocalInput(end) : '';
+    document.getElementById('live-box').style.display = on ? 'block' : 'none';
+}
+// চালু থাকলে {start,end}, বন্ধ থাকলে null, ভুল হলে false (বার্তা দেখিয়ে)
+function readLive() {
+    if (!document.getElementById('live-mode-check').checked) return null;
+    const s = new Date(document.getElementById('live-start').value).getTime();
+    const e = new Date(document.getElementById('live-end').value).getTime();
+    if (!s || !e) { alert('লাইভ টেস্টের জন্য শুরু ও শেষ দুটো সময়ই দিন।'); return false; }
+    if (e <= s) { alert('শেষের সময় অবশ্যই শুরুর সময়ের পরে হতে হবে।'); return false; }
+    return { start: s, end: e };
+}
+document.getElementById('live-mode-check').addEventListener('change', function () {
+    document.getElementById('live-box').style.display = this.checked ? 'block' : 'none';
+});
+
 function saveQuizData() {
     if(!currentQuestions.length) return alert("কোনো প্রশ্ন নেই! আগে প্রশ্ন যোগ করুন।");
     const id = document.getElementById('quiz-id-input').value;
+    const live = readLive();
+    if (live === false) return;
     
     database.ref('quizzes/'+id).set({
         title: document.getElementById('quiz-title-input').value, 
@@ -397,6 +433,8 @@ function saveQuizData() {
         randomizeQuestions: document.getElementById('rand-question-check').checked,
         randomizeOptions: document.getElementById('rand-option-check').checked,
         sectionMode: document.getElementById('section-mode-check').checked,
+        liveStart: live ? live.start : null,
+        liveEnd: live ? live.end : null,
         questions: currentQuestions
     }).then(() => { 
         markSaved();
@@ -470,7 +508,7 @@ function exportToCSV() {
 
 
 // কুইজ সেটিংসের কোনো ঘর বদলালে "সেভ হয়নি" চিহ্ন দেখাবে
-['quiz-title-input','quiz-duration','quiz-pass-mark','quiz-pos-mark','quiz-neg-mark','rand-question-check','rand-option-check','section-mode-check','pub-cat','pub-tab','pub-menu','pub-sub'].forEach(id => {
+['quiz-title-input','quiz-duration','quiz-pass-mark','quiz-pos-mark','quiz-neg-mark','rand-question-check','rand-option-check','section-mode-check','live-mode-check','live-start','live-end','pub-cat','pub-tab','pub-menu','pub-sub'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', markUnsaved);
 });
@@ -541,8 +579,10 @@ function prefillPublish(quizId, isNew) {
 
 // কুইজ সেভ হওয়ার পর পোর্টালে এন্ট্রি করে। ফেরত দেয় একটি বার্তা (বা ফাঁকা লেখা)
 function publishToPortal(quizId, title) {
-    const cat = pubVal('pub-cat'), menu = pubVal('pub-menu');
-    if (!cat && !menu) return Promise.resolve('');
+    const liveNow = readLiveQuiet();
+    const cat = pubVal('pub-cat'), menu = pubVal('pub-menu') || (liveNow ? 'Live Test' : '');
+    if (!cat && !pubVal('pub-menu') && !liveNow) return Promise.resolve('');
+    if (!cat) return Promise.resolve('\n\n⚠️ পোর্টালে যোগ হয়নি: লাইভ টেস্ট কোন পরীক্ষার ভেতরে যাবে তা "Exam" ঘরে দিন।');
     if (!cat || !menu) return Promise.resolve('\n\n⚠️ পোর্টালে যোগ হয়নি: "Exam" ও "Menu" দুটোই দিতে হবে।');
     if (!title) return Promise.resolve('\n\n⚠️ পোর্টালে যোগ হয়নি: কুইজের নাম (Exam Title) দিন।');
 
