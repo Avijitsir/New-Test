@@ -207,3 +207,7 @@ body {
 @media (max-width: 360px) {
     .tb-btn { font-size: 11px; padding: 10px 2px; }
 }
+
+/* রেজাল্ট পেজের ওপরের ফেরার তীর (স্কোর কার্ড ও সমাধান দুই জায়গাতেই থাকে) */
+.rt-back { flex: none; width: 46px; border: none; border-right: 1px solid #e5e7eb; background: #fff; color: #4361ee; font-size: 24px; font-weight: 700; line-height: 1; cursor: pointer; }
+.rt-back:active { background: #eef2ff; }
