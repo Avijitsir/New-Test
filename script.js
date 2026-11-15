@@ -19,6 +19,7 @@ let status, userAnswers;
 let isSubmitted = false;
 let timerInterval;
 let timeLeft = 90 * 60; 
+let quizTotalSecs = 0;
 let isPaused = false;
 let liveInfo = null;      // লাইভ টেস্ট হলে {start, end, off} (সার্ভারের ঘড়ির হিসাবে)
 let autoPaused = false;   // বেরিয়ে যাওয়ায় নিজে থেকে থেমেছে (ছাত্র নিজে Pause দেয়নি)
@@ -124,6 +125,7 @@ function loadQuizFromFirebase(quizId) {
             // 1. Load Settings
             if(data.title) document.getElementById('instTitle').innerText = data.title;
             if(data.duration) timeLeft = parseInt(data.duration) * 60;
+            quizTotalSecs = timeLeft;
             if(data.passMark) quizSettings.passMark = parseFloat(data.passMark);
             if(data.posMark) quizSettings.posMark = parseFloat(data.posMark);
             if(data.negMark) quizSettings.negMark = parseFloat(data.negMark);
@@ -521,6 +523,7 @@ function submitTest(fromRestore) {
         });
     }
     if(!fromRestore) localStorage.setItem('last_score_' + currentQuizId, score);
+    if (liveInfo) recordLive(score, c, w, sk).then(showLiveRank);
 
     document.getElementById('resScore').innerText = score; 
     document.getElementById('resCorrect').innerText = c; 
@@ -860,6 +863,94 @@ function applyLiveLock() {
     if (locked && document.getElementById('tab-solution-view').style.display !== 'none') switchTab('score');
 }
 // নির্দেশাবলীর পাতায়: শুরুর আগে অপেক্ষা, চলাকালীন ব্যানার, শেষ হলে বন্ধ
+// ---- লাইভ: Google লগইন, অংশগ্রহণকারী ও র‍্যাংক ----
+let liveUser = null, liveUserPromise = null;
+function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function getLiveUser() {
+    if (liveUserPromise) return liveUserPromise;
+    liveUserPromise = new Promise(res => {
+        try { const a = firebase.auth(); const off = a.onAuthStateChanged(u => { off(); liveUser = u || null; res(liveUser); }); }
+        catch (e) { res(null); }
+    });
+    return liveUserPromise;
+}
+function liveLogin() {
+    try {
+        const p = new firebase.auth.GoogleAuthProvider();
+        firebase.auth().signInWithPopup(p).then(() => location.reload()).catch(e => {
+            if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) { firebase.auth().signInWithRedirect(p); return; }
+            if (e && e.code === 'auth/popup-closed-by-user') return;
+            alert('লগইন হয়নি: ' + ((e && e.message) || e));
+        });
+    } catch (e) { alert('লগইন চালু করা যায়নি। Chrome ব্রাউজারে খুলে আবার চেষ্টা করুন।'); }
+}
+function liveLogout() { try { firebase.auth().signOut().then(() => location.reload()); } catch (e) { location.reload(); } }
+// লাইভের ফলাফল জমা (একজন একবারই), তারপর র‍্যাংক দেখানো
+function recordLive(score, c, w, sk) {
+    if (!liveInfo || !currentQuizId) return Promise.resolve();
+    const flag = 'live_sent_' + currentQuizId;
+    return getLiveUser().then(u => {
+        if (!u || localStorage.getItem(flag)) return;
+        const ref = database.ref('liveResults/' + currentQuizId + '/' + u.uid);
+        return ref.once('value').then(s => {
+            if (s.val()) { localStorage.setItem(flag, '1'); return; }
+            return ref.set({
+                name: u.displayName || 'Student', score: Number(score), correct: c, wrong: w, skipped: sk,
+                total: questions.length, timeTaken: Math.max(0, (quizTotalSecs || 0) - (timeLeft || 0)),
+                at: firebase.database.ServerValue.TIMESTAMP
+            }).then(() => {
+                localStorage.setItem(flag, '1');
+                return database.ref('liveCount/' + currentQuizId).transaction(n => (n || 0) + 1);
+            });
+        });
+    }).catch(() => {});
+}
+function showLiveRank() {
+    if (!liveInfo || !currentQuizId) return;
+    const box = document.getElementById('liveRankBox'); if (!box) return;
+    box.innerHTML = '<div class="lr-card">⏳ র‍্যাংক হিসাব হচ্ছে...</div>';
+    getLiveUser().then(u => database.ref('liveResults/' + currentQuizId).once('value').then(s => {
+        const all = [];
+        s.forEach(ch => { const v = ch.val(); if (v) all.push(Object.assign({ uid: ch.key }, v)); });
+        all.sort((a, b) => (b.score - a.score) || ((a.timeTaken || 0) - (b.timeTaken || 0)) || ((a.at || 0) - (b.at || 0)));
+        const me = u ? all.findIndex(x => x.uid === u.uid) : -1;
+        const running = nowSrv() < liveInfo.end;
+        const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+        let h = '';
+        if (me >= 0) h += '<div class="lr-card"><div class="lr-rank">🏆 #' + (me + 1) + '</div><div class="lr-sub">মোট ' + all.length + ' জনের মধ্যে আপনার র‍্যাংক</div>' +
+            (running ? '<div class="lr-note">লাইভ এখনো চলছে। আরও কেউ জমা দিলে র‍্যাংক বদলাতে পারে।</div>' : '<div class="lr-note">লাইভ শেষ, এটাই চূড়ান্ত র‍্যাংক।</div>') +
+            '<button class="lr-btn" onclick="showLiveRank()">🔄 আবার দেখুন</button></div>';
+        else if (!u) h += '<div class="lr-login"><b>র‍্যাংক দেখতে লগইন দরকার</b><br><button onclick="liveLogin()">🔐 Google দিয়ে লগইন</button></div>';
+        else h += '<div class="lr-card"><div class="lr-sub">মোট ' + all.length + ' জন জমা দিয়েছে। আপনার ফল এখনো যোগ হয়নি।</div><button class="lr-btn" onclick="showLiveRank()">🔄 আবার দেখুন</button></div>';
+        if (all.length) {
+            h += '<table class="lr-table"><tr><th>#</th><th>নাম</th><th>নম্বর</th></tr>';
+            all.slice(0, 10).forEach((x, i) => { h += '<tr class="' + (i === me ? 'me' : '') + '"><td>' + medal(i) + '</td><td>' + esc(x.name) + '</td><td>' + esc(x.score) + '</td></tr>'; });
+            if (me >= 10) h += '<tr class="me"><td>' + (me + 1) + '</td><td>' + esc(all[me].name) + ' (আপনি)</td><td>' + esc(all[me].score) + '</td></tr>';
+            h += '</table>';
+        }
+        box.innerHTML = h;
+    })).catch(() => { box.innerHTML = ''; });
+}
+// Start-এর আগে লগইন ও "আগে দিয়েছেন কিনা" দেখা
+function liveAuthGate(box, btn, canStart) {
+    btn.disabled = true;
+    getLiveUser().then(u => {
+        if (!u) {
+            box.insertAdjacentHTML('afterbegin', '<div class="lr-login">🔐 <b>লাইভ টেস্টে অংশ নিতে Google লগইন দরকার</b><br><small>শুধু একবার লগইন করলেই হবে। আপনার নাম র‍্যাংক তালিকায় দেখা যাবে।</small><br><button id="liveLoginBtn" onclick="liveLogin()">🔐 Google দিয়ে লগইন করুন</button></div>');
+            return;
+        }
+        const who = '<div style="font-size:13px; margin-bottom:8px;">✅ <b>' + esc(u.displayName || 'Student') + '</b> হিসেবে লগইন • <a href="#" onclick="liveLogout();return false;">অন্য অ্যাকাউন্ট?</a></div>';
+        return database.ref('liveResults/' + currentQuizId + '/' + u.uid).once('value').then(s => {
+            if (s.val()) {
+                box.insertAdjacentHTML('afterbegin', who + '<div style="background:#ecfdf5; border-left:5px solid #059669; border-radius:10px; padding:12px 14px; margin-bottom:12px;">✅ <b>আপনি এই লাইভ টেস্ট দিয়ে ফেলেছেন।</b><br><small>লাইভ টেস্টে আবার দেওয়া যায় না।</small></div><div id="liveRankBox"></div>');
+                showLiveRank(); return;
+            }
+            box.insertAdjacentHTML('afterbegin', who);
+            if (canStart) btn.disabled = false;
+        });
+    }).catch(() => { box.insertAdjacentHTML('afterbegin', '<div class="lr-login">⚠️ লগইন যাচাই করা যায়নি। ইন্টারনেট দেখে পাতাটি রিফ্রেশ করুন।</div>'); });
+}
+
 function applyLiveGate() {
     const btn = document.getElementById('startTestBtn'), box = document.getElementById('instContent');
     const n = nowSrv();
@@ -877,8 +968,10 @@ function applyLiveGate() {
             cd.textContent = fmtCd(r);
         }, 1000);
         cd.textContent = fmtCd(Math.ceil((liveInfo.start - n) / 1000));
+        liveAuthGate(box, btn, false);
         return;
     }
     const remain = Math.floor((liveInfo.end - n) / 1000);
     box.insertAdjacentHTML('afterbegin', '<div style="background:linear-gradient(135deg,#ffebee,#ffcdd2); border-left:5px solid #e53935; border-radius:10px; padding:12px 14px; margin-bottom:12px;">🔴 <b>LIVE TEST</b><br>লাইভ শেষ হবে: <b>' + fmtDT(liveInfo.end) + '</b> (আর ' + fmtCd(remain) + ' বাকি)<br><small>শেষের সময় এলে আপনার পরীক্ষা <b>নিজে থেকে জমা</b> হয়ে যাবে। লাইভ চলাকালীন সমাধান দেখা যাবে না, শেষের পরে দেখা যাবে। Reattempt নেই।</small></div>');
+    liveAuthGate(box, btn, true);
 }
