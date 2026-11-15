@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>প্রশ্নের ভান্ডার</title>
+<script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
+<style>
+  :root { --p:#4361ee; --g:#059669; --r:#e11d48; --bg:#f1f5f9; --tx:#1e293b; --mut:#64748b; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--tx); padding-bottom: 60px; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 14px; }
+  .top { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+  .top a { text-decoration:none; background:#fff; padding:8px 14px; border-radius:20px; color:var(--p); font-weight:700; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  h1 { margin:0; font-size:1.4rem; }
+  .sub { color:var(--mut); font-size:.9rem; margin:2px 0 14px; }
+  .card { background:#fff; border-radius:16px; padding:16px; margin-bottom:14px; box-shadow:0 2px 8px rgba(0,0,0,.05); border-top:5px solid var(--p); }
+  .card.g { border-top-color: var(--g); } .card.o { border-top-color:#f59e0b; } .card.pu { border-top-color:#7c3aed; }
+  .card h2 { margin:0 0 4px; font-size:1.1rem; }
+  .hint { color:var(--mut); font-size:.85rem; margin:0 0 10px; }
+  label { display:block; font-weight:700; font-size:.82rem; margin:10px 0 4px; }
+  input[type=text], input[type=number], input[type=datetime-local], select, textarea { width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:9px; font-size:.95rem; font-family:inherit; background:#fff; }
+  textarea { min-height:130px; }
+  .row { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+  .btn { border:0; border-radius:10px; padding:10px 18px; font-weight:800; cursor:pointer; color:#fff; background:var(--p); font-size:.95rem; margin-top:10px; }
+  .btn.g { background:var(--g); } .btn.r { background:var(--r); } .btn.gray { background:#94a3b8; } .btn.sm { padding:5px 10px; font-size:.78rem; margin:0; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  th { background:#eef2ff; color:#3730a3; text-align:left; padding:8px; font-size:.8rem; }
+  td { padding:8px; border-top:1px solid #f1f5f9; }
+  .chk { display:flex; align-items:center; gap:8px; margin-top:10px; font-weight:700; font-size:.9rem; }
+  .chk input { width:auto; }
+  .box { border-radius:10px; padding:10px 12px; margin-top:10px; font-size:.9rem; }
+  .ok { background:#ecfdf5; color:#065f46; border-left:4px solid #059669; }
+  .warn { background:#fffbeb; color:#92400e; border-left:4px solid #f59e0b; }
+  .bad { background:#fef2f2; color:#991b1b; border-left:4px solid #e11d48; }
+  .livebox { background:#fff1f2; border:1px solid #fecdd3; border-radius:12px; padding:12px; margin-top:10px; }
+  .muted { color:var(--mut); }
+  .res a { color:var(--p); word-break:break-all; font-size:.82rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><a href="quiz-maker.html">← কুইজ মেকার</a></div>
+  <h1>🗃️ প্রশ্নের ভান্ডার</h1>
+  <p class="sub">এখানে অনেক প্রশ্ন একবার জমা রাখুন। তারপর এক ক্লিকে ভান্ডার থেকে এলোমেলো প্রশ্ন নিয়ে অনেকগুলো টেস্ট (লাইভ হলে প্রতিদিনের) বানিয়ে ফেলুন।</p>
+
+  <!-- ১) ভান্ডারে কী আছে -->
+  <div class="card">
+    <h2>📊 ভান্ডারে এখন কী আছে</h2>
+    <p class="hint">একই প্রশ্ন দুইবার জমা হয় না। "নতুন" মানে আগে কোনো টেস্টে ব্যবহার হয়নি।</p>
+    <div id="summary"><span class="muted">লোড হচ্ছে...</span></div>
+    <button class="btn gray sm" style="margin-top:10px" onclick="resetUsed()">♻️ "ব্যবহার হয়েছে" গণনা শূন্য করুন</button>
+  </div>
+
+  <!-- ২) জমা -->
+  <div class="card g">
+    <h2>📥 ভান্ডারে প্রশ্ন জমা করুন</h2>
+    <p class="hint">দুটি উপায়: নিচের লেখা বক্সে সরাসরি পেস্ট করুন, অথবা কুইজ মেকারে বানানো কোনো কুইজের প্রশ্ন তুলে নিন।</p>
+    <label>বিষয় / টপিক (ভান্ডারে এই নামে সাজানো হবে)</label>
+    <input type="text" id="in-topic" list="topicList" placeholder="যেমন: General Knowledge" autocomplete="off">
+    <datalist id="topicList"></datalist>
+
+    <label>১) সরাসরি পেস্ট করুন (কুইজ মেকারের Bulk ফরম্যাট, প্রশ্নের মাঝে ফাঁকা লাইন)</label>
+    <textarea id="in-bulk" placeholder="ভারতের রাজধানী কী?&#10;মুম্বই&#10;নয়াদিল্লি&#10;কলকাতা&#10;চেন্নাই&#10;Answer: নয়াদিল্লি&#10;Explanation: (ঐচ্ছিক)"></textarea>
+    <button class="btn g" onclick="importBulk()">⚡ পেস্ট করা প্রশ্ন জমা করুন</button>
+
+    <label style="margin-top:18px">২) বানানো কুইজ থেকে তুলে নিন</label>
+    <select id="in-quiz"></select>
+    <button class="btn g" onclick="importQuiz()">📥 এই কুইজের সব প্রশ্ন জমা করুন</button>
+    <div id="in-msg"></div>
+  </div>
+
+  <!-- ৩) বানান -->
+  <div class="card pu">
+    <h2>⚡ ভান্ডার থেকে টেস্ট বানান</h2>
+    <p class="hint">প্রতিটি টেস্টে আলাদা প্রশ্ন আসে। আগে কম ব্যবহার হওয়া প্রশ্ন আগে নেওয়া হয়, তাই প্রশ্ন যতটা সম্ভব পুনরাবৃত্তি হয় না।</p>
+    <div class="row">
+      <div><label>বিষয়</label><select id="g-topic"></select></div>
+      <div><label>প্রতি টেস্টে প্রশ্ন</label><input type="number" id="g-per" value="20" min="1" max="200"></div>
+      <div><label>কয়টি টেস্ট বানাবেন</label><input type="number" id="g-n" value="10" min="1" max="100"></div>
+    </div>
+    <div class="row">
+      <div><label>নামের শুরু</label><input type="text" id="g-prefix" value="Daily GK Test"></div>
+      <div><label>প্রথম নম্বর</label><input type="number" id="g-start" value="1" min="1"></div>
+    </div>
+    <div class="row">
+      <div><label>⏱️ সময় (মিনিট)</label><input type="number" id="g-dur" value="15"></div>
+      <div><label>🎯 পাস মার্ক</label><input type="number" id="g-pass" value="8"></div>
+      <div><label>✅ সঠিকে (+)</label><input type="number" id="g-pos" value="1" step="0.25"></div>
+      <div><label>❌ ভুলে (−)</label><input type="number" id="g-neg" value="0.25" step="0.25"></div>
+    </div>
+    <label class="chk"><input type="checkbox" id="g-rq" checked> প্রশ্নের ক্রম এলোমেলো (Shuffle)</label>
+    <label class="chk"><input type="checkbox" id="g-ro" checked> অপশনের ক্রম এলোমেলো</label>
+
+    <label class="chk" style="color:#be123c"><input type="checkbox" id="g-live"> 🔴 লাইভ টেস্ট হিসেবে বানান (প্রতিদিন একটা করে)</label>
+    <div class="livebox" id="g-livebox" style="display:none">
+      <div class="row">
+        <div><label>🟢 প্রথম টেস্ট কখন শুরু</label><input type="datetime-local" id="g-ls"></div>
+        <div><label>কত ঘণ্টা লাইভ থাকবে</label><input type="number" id="g-lh" value="3" min="1"></div>
+        <div><label>কত দিন পরপর</label><input type="number" id="g-li" value="1" min="1"></div>
+      </div>
+      <p class="hint" style="margin:8px 0 0">যেমন: ১০ নভেম্বর রাত ৮টা, ৩ ঘণ্টা, প্রতি ১ দিন → প্রতিদিন রাত ৮টা থেকে ১১টা একটা করে লাইভ টেস্ট। শেষে আপনা-আপনি সরে যাবে।</p>
+    </div>
+
+    <label style="margin-top:14px">🌐 পোর্টালে কোথায় বসবে</label>
+    <div class="row">
+      <div><label>Exam (আইকন)</label><input type="text" id="g-cat" list="catList" placeholder="যেমন: WBPSC Clerkship" autocomplete="off"></div>
+      <div><label>Tab</label><input type="text" id="g-tab" list="tabList" placeholder="Mock Tests" autocomplete="off"></div>
+      <div><label>Menu</label><input type="text" id="g-menu" list="menuList" placeholder="যেমন: GK" autocomplete="off"></div>
+      <div><label>Sub (ঐচ্ছিক)</label><input type="text" id="g-sub" autocomplete="off"></div>
+    </div>
+    <datalist id="catList"></datalist><datalist id="tabList"></datalist><datalist id="menuList"></datalist>
+
+    <div id="g-preview"></div>
+    <button class="btn" id="g-btn" onclick="generate()">⚡ টেস্টগুলো বানান</button>
+    <div id="g-msg"></div>
+  </div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDwGzTPmFg-gjoYtNWNJM47p22NfBugYFA",
+  authDomain: "mock-test-1eea6.firebaseapp.com",
+  databaseURL: "https://mock-test-1eea6-default-rtdb.firebaseio.com",
+  projectId: "mock-test-1eea6",
+  storageBucket: "mock-test-1eea6.firebaseapp.com",
+  messagingSenderId: "111849173136",
+  appId: "1:111849173136:web:8b211f58d854119e88a815"
+};
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const DEFAULT_TOPICS = ['General Knowledge','Bangla','English','Mathematics','Science','Reasoning','History','Geography','Polity'];
+
+let BANK = {};      // key -> প্রশ্ন
+let QUIZZES = [];   // বানানো কুইজ
+let EXAMS = [];     // পোর্টালের এন্ট্রি
+
+// একই প্রশ্ন চেনার জন্য: HTML ও বাড়তি ফাঁকা বাদ দিয়ে ছোট হাতের লেখার হ্যাশ
+function norm(t) { return String(t || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase(); }
+function hashKey(s) {
+  let a = 0x811c9dc5, b = 5381;
+  for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); a ^= c; a = Math.imul(a, 16777619) >>> 0; b = (Math.imul(b, 33) ^ c) >>> 0; }
+  return a.toString(36) + b.toString(36) + s.length.toString(36);
+}
+function topics() { return [...new Set(Object.values(BANK).map(q => q.topic || 'General Knowledge'))].sort(); }
+
+function loadAll() {
+  return Promise.all([db.ref('bank').once('value'), db.ref('quizzes').once('value'), db.ref('exams').once('value')]).then(([b, q, e]) => {
+    BANK = b.val() || {};
+    QUIZZES = [];
+    q.forEach(ch => { const v = ch.val() || {}; const qs = Array.isArray(v.questions) ? v.questions : Object.values(v.questions || {}); QUIZZES.push({ id: ch.key, title: v.title || ch.key, qs: qs }); });
+    EXAMS = [];
+    e.forEach(ch => { EXAMS.push(ch.val() || {}); });
+    renderAll();
+  }).catch(err => { $('summary').innerHTML = '<div class="box bad">লোড হয়নি: ' + esc(err.message) + '</div>'; });
+}
+
+function renderAll() {
+  // সারাংশ
+  const by = {};
+  Object.values(BANK).forEach(q => { const t = q.topic || 'General Knowledge'; by[t] = by[t] || { n: 0, fresh: 0 }; by[t].n++; if (!q.used) by[t].fresh++; });
+  const names = Object.keys(by).sort();
+  const total = Object.keys(BANK).length;
+  $('summary').innerHTML = total ? ('<table><tr><th>বিষয়</th><th>মোট</th><th>নতুন</th><th></th></tr>' +
+    names.map(t => '<tr><td>' + esc(t) + '</td><td>' + by[t].n + '</td><td>' + by[t].fresh + '</td><td><button class="btn r sm" onclick="delTopic(decodeURIComponent(\'' + encodeURIComponent(t) + '\'))">🗑 মুছুন</button></td></tr>').join('') +
+    '<tr><th>সব মিলিয়ে</th><th>' + total + '</th><th></th><th></th></tr></table>') : '<div class="box warn">ভান্ডার এখনো ফাঁকা। নিচে প্রশ্ন জমা করুন।</div>';
+  // তালিকা
+  const tl = [...new Set(DEFAULT_TOPICS.concat(names))];
+  $('topicList').innerHTML = tl.map(t => '<option value="' + esc(t) + '">').join('');
+  $('g-topic').innerHTML = '<option value="">সব বিষয় মিলিয়ে</option>' + names.map(t => '<option value="' + esc(t) + '">' + esc(t) + ' (' + by[t].n + ')</option>').join('');
+  $('in-quiz').innerHTML = QUIZZES.map(q => '<option value="' + esc(q.id) + '">' + esc(q.title) + ' (' + q.qs.length + ' প্রশ্ন)</option>').join('') || '<option value="">কোনো কুইজ নেই</option>';
+  const u = a => [...new Set(a.filter(Boolean))];
+  $('catList').innerHTML = u(EXAMS.map(v => v.category)).map(v => '<option value="' + esc(v) + '">').join('');
+  $('tabList').innerHTML = u(['Mock Tests'].concat(EXAMS.map(v => v.topTab))).map(v => '<option value="' + esc(v) + '">').join('');
+  $('menuList').innerHTML = u(EXAMS.map(v => v.subject)).map(v => '<option value="' + esc(v) + '">').join('');
+  preview();
+}
+
+// ---------- জমা ----------
+function addToBank(list, topicOverride) {
+  const upd = {}, seen = new Set(); let added = 0, dup = 0, bad = 0;
+  list.forEach(q => {
+    const text = q && q.question ? String(q.question) : '';
+    const opts = q && Array.isArray(q.options) ? q.options : [];
+    if (!norm(text) || opts.length < 2 || q.correctIndex === undefined || q.correctIndex === null || q.correctIndex < 0) { bad++; return; }
+    const key = hashKey(norm(text));
+    if (BANK[key] || seen.has(key)) { dup++; return; }
+    seen.add(key);
+    upd['bank/' + key] = {
+      topic: (topicOverride || q.subject || 'General Knowledge').trim(), passage: q.passage || '', question: text, qImg: q.qImg || '',
+      options: opts.slice(0, 4), correctIndex: Number(q.correctIndex) || 0, explanation: q.explanation || '', expImg: q.expImg || '',
+      used: 0, at: Date.now()
+    };
+    added++;
+  });
+  const msg = n => '<div class="box ' + (added ? 'ok' : 'warn') + '">✅ ' + added + 'টি নতুন প্রশ্ন জমা হয়েছে' + (dup ? ' • ' + dup + 'টি আগে থেকেই ছিল (বাদ)' : '') + (bad ? ' • ' + bad + 'টি ঠিক ফরম্যাটে ছিল না (বাদ)' : '') + '</div>';
+  if (!added) { $('in-msg').innerHTML = msg(); return Promise.resolve(); }
+  return db.ref().update(upd).then(() => { Object.keys(upd).forEach(k => { BANK[k.slice(5)] = upd[k]; }); $('in-msg').innerHTML = msg(); renderAll(); })
+    .catch(e => { $('in-msg').innerHTML = '<div class="box bad">জমা হয়নি: ' + esc(e.message) + '</div>'; });
+}
+function parseBulk(txt) {
+  const out = [];
+  txt.split(/\n\s*\n/).forEach(b => {
+    const lines = b.trim().split('\n').filter(l => l.trim());
+    if (lines.length < 6) return;
+    const ops = [lines[1].trim(), lines[2].trim(), lines[3].trim(), lines[4].trim()];
+    const ansLine = lines.find(l => l.toLowerCase().startsWith('answer:'));
+    const cIdx = ansLine ? ops.indexOf(ansLine.slice(ansLine.indexOf(':') + 1).trim()) : -1;
+    const expLine = lines.find(l => l.toLowerCase().startsWith('explanation:'));
+    out.push({ question: lines[0].trim(), options: ops, correctIndex: cIdx, explanation: expLine ? (expLine.split(/:(.+)/)[1] || '').trim() : '' });
+  });
+  return out;
+}
+function importBulk() {
+  const txt = $('in-bulk').value.trim();
+  if (!txt) return alert('আগে প্রশ্ন পেস্ট করুন।');
+  const topic = $('in-topic').value.trim() || 'General Knowledge';
+  addToBank(parseBulk(txt), topic).then(() => { if ($('in-msg').innerText.includes('জমা হয়েছে')) $('in-bulk').value = ''; });
+}
+function importQuiz() {
+  const q = QUIZZES.find(x => x.id === $('in-quiz').value);
+  if (!q) return alert('কুইজ বেছে নিন।');
+  addToBank(q.qs, $('in-topic').value.trim());
+}
+function delTopic(t) {
+  const keys = Object.keys(BANK).filter(k => (BANK[k].topic || 'General Knowledge') === t);
+  if (!keys.length || !confirm('"' + t + '" বিষয়ের ' + keys.length + 'টি প্রশ্ন ভান্ডার থেকে মুছে যাবে।\n(যে টেস্টগুলো আগেই বানানো হয়েছে সেগুলো বদলাবে না।) নিশ্চিত?')) return;
+  const upd = {}; keys.forEach(k => { upd['bank/' + k] = null; });
+  db.ref().update(upd).then(() => { keys.forEach(k => delete BANK[k]); renderAll(); }).catch(e => alert('মোছা যায়নি: ' + e.message));
+}
+function resetUsed() {
+  const keys = Object.keys(BANK).filter(k => BANK[k].used);
+  if (!keys.length) return alert('সব প্রশ্নই ইতিমধ্যে "নতুন"।');
+  if (!confirm('সব প্রশ্ন আবার "নতুন" ধরা হবে। এরপর বানানো টেস্টে পুরনো প্রশ্ন আগের মতোই আসতে পারে। নিশ্চিত?')) return;
+  const upd = {}; keys.forEach(k => { upd['bank/' + k + '/used'] = 0; });
+  db.ref().update(upd).then(() => { keys.forEach(k => { BANK[k].used = 0; }); renderAll(); }).catch(e => alert('হয়নি: ' + e.message));
+}
+
+// ---------- বানানো ----------
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function poolNow() { const t = $('g-topic').value; return Object.keys(BANK).filter(k => !t || (BANK[k].topic || 'General Knowledge') === t); }
+// কম ব্যবহার হওয়া প্রশ্ন আগে; একই টেস্টে একই প্রশ্ন দুইবার নয়
+function plan(keys, per, n) {
+  const local = {}; keys.forEach(k => { local[k] = 0; });
+  const sets = [];
+  for (let t = 0; t < n; t++) {
+    const idx = shuffle(keys.slice());
+    idx.sort((a, b) => ((BANK[a].used || 0) + local[a]) - ((BANK[b].used || 0) + local[b]));
+    const take = idx.slice(0, per); take.forEach(k => { local[k]++; });
+    sets.push(shuffle(take));
+  }
+  return { sets: sets, local: local };
+}
+function num(id) { return Number($(id).value); }
+function preview() {
+  const keys = poolNow(), per = num('g-per') || 0, n = num('g-n') || 0, need = per * n;
+  const fresh = keys.filter(k => !BANK[k].used).length;
+  let h = '';
+  if (!keys.length) h = '<div class="box warn">এই বিষয়ে ভান্ডারে প্রশ্ন নেই।</div>';
+  else if (keys.length < per) h = '<div class="box bad">ভান্ডারে মাত্র ' + keys.length + 'টি প্রশ্ন, কিন্তু প্রতি টেস্টে ' + per + 'টি লাগবে।</div>';
+  else if (need <= fresh) h = '<div class="box ok">মোট ' + need + 'টি প্রশ্ন লাগবে, ' + fresh + 'টি নতুন আছে। ✅ সব টেস্টে নতুন প্রশ্ন, কোনো পুনরাবৃত্তি নেই।</div>';
+  else h = '<div class="box warn">মোট ' + need + 'টি প্রশ্ন লাগবে, কিন্তু নতুন আছে ' + fresh + 'টি। ⚠️ ' + (need - fresh) + 'টি জায়গায় আগে ব্যবহার হওয়া প্রশ্ন আবার আসবে। আরও প্রশ্ন জমা করলে এটা কমবে।</div>';
+  $('g-preview').innerHTML = h;
+}
+['g-topic', 'g-per', 'g-n'].forEach(id => $(id).addEventListener('input', preview));
+$('g-live').addEventListener('change', () => { $('g-livebox').style.display = $('g-live').checked ? 'block' : 'none'; });
+
+function generate() {
+  const keys = poolNow(), per = num('g-per'), n = num('g-n'), startNo = num('g-start') || 1;
+  const prefix = $('g-prefix').value.trim(), cat = $('g-cat').value.trim();
+  const live = $('g-live').checked;
+  const menu = $('g-menu').value.trim() || (live ? 'Live Test' : '');
+  if (!(per >= 1) || !(n >= 1)) return alert('প্রশ্ন ও টেস্টের সংখ্যা দিন।');
+  if (per * n > 3000) return alert('একবারে সর্বোচ্চ ৩০০০ প্রশ্নের জায়গা (প্রশ্ন × টেস্ট) বানানো যাবে। কমিয়ে দিন।');
+  if (keys.length < per) return alert('ভান্ডারে যথেষ্ট প্রশ্ন নেই।');
+  if (!prefix) return alert('টেস্টের নামের শুরু লিখুন।');
+  if (!cat) return alert('"Exam (আইকন)" ঘরে লিখুন টেস্টগুলো পোর্টালের কোথায় যাবে।');
+  if (!menu) return alert('"Menu" ঘরে লিখুন (যেমন: GK)।');
+  let ls = null, lh = 0, li = 1;
+  if (live) {
+    ls = $('g-ls').value ? new Date($('g-ls').value).getTime() : NaN; lh = num('g-lh'); li = num('g-li');
+    if (!ls || isNaN(ls)) return alert('লাইভের প্রথম শুরুর সময় দিন।');
+    if (!(lh > 0) || !(li >= 1)) return alert('কত ঘণ্টা লাইভ থাকবে ও কত দিন পরপর, দুটোই দিন।');
+  }
+  const pl = plan(keys, per, n);
+  if (!confirm(n + 'টি টেস্ট বানানো হবে (প্রতিটিতে ' + per + 'টি প্রশ্ন)' + (live ? ', লাইভ আকারে' : '') + '।\nপোর্টালে যাবে: ' + cat + ' → ' + menu + '\nঠিক আছে?')) return;
+
+  const pos = $('g-pos').value, tab = $('g-tab').value.trim() || 'Mock Tests', sub = $('g-sub').value.trim();
+  const iconSrc = EXAMS.find(v => v.category === cat && v.icon); const icon = iconSrc ? iconSrc.icon : '';
+  const base = location.href.split('?')[0].split('#')[0].replace(/[^/]*$/, '') + 'exam.html';
+  const upd = {}, made = [], stamp = Date.now();
+  pl.sets.forEach((set, i) => {
+    const id = 'quiz_' + stamp + '_' + (i + 1);
+    const title = prefix + ' ' + (startNo + i);
+    const lsI = live ? ls + i * li * 86400000 : null, leI = live ? lsI + lh * 3600000 : null;
+    const questions = set.map(k => { const q = BANK[k]; return { subject: q.topic || 'General Knowledge', passage: q.passage || '', question: q.question, qImg: q.qImg || null, options: q.options, optImgs: [null, null, null, null], correctIndex: q.correctIndex, explanation: q.explanation || '', expImg: q.expImg || null }; });
+    upd['quizzes/' + id] = { title: title, duration: String($('g-dur').value), passMark: String($('g-pass').value), posMark: String(pos), negMark: String($('g-neg').value),
+      randomizeQuestions: $('g-rq').checked, randomizeOptions: $('g-ro').checked, sectionMode: false, liveStart: lsI, liveEnd: leI, questions: questions };
+    const ek = db.ref('exams').push().key;
+    const link = base + '?id=' + id;
+    upd['exams/' + ek] = { category: cat, icon: icon, topTab: tab, subject: menu, subFilter: sub, chapter: title, link: link, locked: false,
+      qCount: questions.length, marks: +(questions.length * (Number(pos) || 1)).toFixed(2), mins: Number($('g-dur').value) || 0, liveStart: lsI, liveEnd: leI };
+    made.push({ title: title, link: link, ls: lsI });
+  });
+  Object.keys(pl.local).forEach(k => { if (pl.local[k]) upd['bank/' + k + '/used'] = (BANK[k].used || 0) + pl.local[k]; });
+
+  $('g-btn').disabled = true; $('g-msg').innerHTML = '<div class="box warn">বানানো হচ্ছে...</div>';
+  db.ref().update(upd).then(() => {
+    Object.keys(pl.local).forEach(k => { if (pl.local[k]) BANK[k].used = (BANK[k].used || 0) + pl.local[k]; });
+    $('g-msg').innerHTML = '<div class="box ok res">🎉 ' + made.length + 'টি টেস্ট বানানো হয়ে গেছে এবং পোর্টালে যোগ হয়েছে।<br>' +
+      made.map(m => '• ' + esc(m.title) + (m.ls ? ' — ' + new Date(m.ls).toLocaleString('bn-BD') : '')).join('<br>') + '</div>';
+    return loadAll();
+  }).catch(e => { $('g-msg').innerHTML = '<div class="box bad">বানানো যায়নি: ' + esc(e.message) + '</div>'; }).then(() => { $('g-btn').disabled = false; });
+}
+
+loadAll();
+</script>
+</body>
+</html>
