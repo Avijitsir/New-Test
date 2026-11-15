@@ -142,6 +142,8 @@
                 <div style="margin-top:20px; text-align:center; padding-bottom:20px;">
                     <button class="tb-btn primary" style="background:#4361ee; color:white; padding:12px 30px; margin-bottom:10px;" id="viewSolBtn" onclick="switchTab('solution')">View Solutions &rarr;</button>
                     <br>
+                    <button class="tb-btn" id="pdfBtn" style="background:linear-gradient(135deg,#0b3d47,#2f7480); color:#fff; padding:11px 26px; margin-bottom:10px; border-radius:8px; border:0; font-weight:700;" onclick="downloadPdf()">📄 PDF ডাউনলোড (উত্তর ও ব্যাখ্যাসহ)</button>
+                    <br>
                     <button class="tb-btn secondary" style="background:#6c757d; color:white; padding:10px 20px; margin-right:6px;" onclick="goPortal()">&larr; টেস্ট সিরিজে ফিরুন</button>
                     <button class="tb-btn secondary" style="background:#6c757d; color:white; padding:10px 20px;" id="reattemptBtn" onclick="retakeTest()">Close & Re-attempt</button>
                 </div>
@@ -185,5 +187,6 @@
     </div>
 
     <script src="script.js"></script>
+    <script src="pdf.js"></script>
 </body>
 </html>
