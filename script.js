@@ -878,9 +878,26 @@ function getLiveUser() {
 function isAppWindow() {
     try { return (window.matchMedia && (window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: minimal-ui)').matches)) || window.navigator.standalone === true; } catch (e) { return false; }
 }
+function isWebView() {
+    const ua = navigator.userAgent || '';
+    return /; wv\)/.test(ua) || /\bwv\b/.test(ua) || (/Android/.test(ua) && /Version\/\d+\.\d+/.test(ua) && /Chrome\//.test(ua)) || /FBAN|FBAV|Instagram|Line\/|WhatsApp/i.test(ua);
+}
+function copyExamLink() {
+    const u = location.href, done = () => alert('লিংক কপি হয়েছে। এখন Chrome খুলে ঠিকানার ঘরে পেস্ট করে খুলুন।');
+    try { navigator.clipboard.writeText(u).then(done, () => prompt('এই লিংকটি কপি করে Chrome-এ খুলুন:', u)); } catch (e) { prompt('এই লিংকটি কপি করে Chrome-এ খুলুন:', u); }
+}
 function chromeLink() {
     const u = location.href.replace(/^https?:\/\//, '');
     return 'intent://' + u + '#Intent;scheme=https;package=com.android.chrome;end';
+}
+function liveHelpBox() {
+    const strong = isAppWindow() || isWebView();
+    return '<div style="margin-top:10px; font-size:13px; background:' + (strong ? '#fffbeb' : '#f1f5f9') + '; border-left:4px solid ' + (strong ? '#f59e0b' : '#94a3b8') + '; border-radius:8px; padding:8px 10px;">' +
+        (strong ? '⚠️ <b>আপনি অ্যাপ/শর্টকাটের ভেতরে আছেন।</b> এখানে Google লগইন সাধারণত খোলে না।<br>' : '<b>লগইন উইন্ডো না খুললে:</b><br>') +
+        'নিচের বোতামে <b>Chrome-এ</b> খুলে লগইন করুন (একবারই লাগবে)।<br>' +
+        '<a href="' + chromeLink() + '" style="display:inline-block; margin:6px 6px 0 0; background:#2563eb; color:#fff; padding:7px 14px; border-radius:16px; text-decoration:none; font-weight:700;">🌐 Chrome-এ খুলুন</a>' +
+        '<button type="button" onclick="copyExamLink()" style="margin:6px 0 0; background:#fff; border:1px solid #94a3b8; border-radius:16px; padding:7px 14px; font-weight:700;">📋 লিংক কপি</button>' +
+        '<div style="margin-top:6px; color:#64748b;">Chrome-এ খুলতে না পারলে "লিংক কপি" চেপে Chrome-এর ঠিকানার ঘরে পেস্ট করুন।</div></div>';
 }
 function liveLoginMsg(t) {
     let m = document.getElementById('liveLoginMsg');
@@ -895,7 +912,7 @@ function liveLogin() {
     try { p = new firebase.auth.GoogleAuthProvider(); if (p.setCustomParameters) p.setCustomParameters({ prompt: 'select_account' }); }
     catch (e) { reset(); liveLoginMsg('লগইন চালু করা যায়নি। পাতাটি রিফ্রেশ করে আবার চেষ্টা করুন।'); return; }
     // 8 সেকেন্ডেও সাড়া না এলে বোতাম আবার খুলে দেয় (আটকে থাকবে না)
-    const guard = setTimeout(() => { reset(); liveLoginMsg('লগইন উইন্ডো সাড়া দিচ্ছে না। Chrome ব্রাউজারে (শর্টকাট নয়) পাতাটি খুলে আবার চেষ্টা করুন।'); }, 20000);
+    const guard = setTimeout(() => { reset(); liveLoginMsg('লগইন উইন্ডো সাড়া দিচ্ছে না। উপরের "Chrome-এ খুলুন" বা "লিংক কপি" বোতাম ব্যবহার করুন।'); }, 8000);
     firebase.auth().signInWithPopup(p).then(() => { clearTimeout(guard); location.reload(); }).catch(e => {
         clearTimeout(guard); reset();
         const code = (e && e.code) || '';
@@ -959,7 +976,7 @@ function liveAuthGate(box, btn, canStart) {
     btn.disabled = true;
     getLiveUser().then(u => {
         if (!u) {
-            box.insertAdjacentHTML('afterbegin', '<div class="lr-login">🔐 <b>লাইভ টেস্টে অংশ নিতে Google লগইন দরকার</b><br><small>শুধু একবার লগইন করলেই হবে। আপনার নাম র‍্যাংক তালিকায় দেখা যাবে।</small><br><button id="liveLoginBtn" onclick="liveLogin()">🔐 Google দিয়ে লগইন করুন</button>' + (isAppWindow() ? '<div style="margin-top:10px; font-size:13px; background:#fffbeb; border-left:4px solid #f59e0b; border-radius:8px; padding:8px 10px;">⚠️ আপনি শর্টকাট/অ্যাপ উইন্ডোতে আছেন, এখানে Google লগইন অনেক সময় খোলে না।<br><b>একবার</b> নিচের বোতামে Chrome-এ খুলে লগইন করুন। তারপর এই অ্যাপে ফিরে এলে সাধারণত লগইন করাই থাকে।<br><a href="' + chromeLink() + '" style="display:inline-block; margin-top:6px; background:#2563eb; color:#fff; padding:7px 14px; border-radius:16px; text-decoration:none; font-weight:700;">🌐 Chrome-এ খুলুন</a></div>' : '') + '</div>');
+            box.insertAdjacentHTML('afterbegin', '<div class="lr-login">🔐 <b>লাইভ টেস্টে অংশ নিতে Google লগইন দরকার</b><br><small>শুধু একবার লগইন করলেই হবে। আপনার নাম র‍্যাংক তালিকায় দেখা যাবে।</small><br><button id="liveLoginBtn" onclick="liveLogin()">🔐 Google দিয়ে লগইন করুন</button>' + liveHelpBox() + '</div>');
             return;
         }
         const who = '<div style="font-size:13px; margin-bottom:8px;">✅ <b>' + esc(u.displayName || 'Student') + '</b> হিসেবে লগইন • <a href="#" onclick="liveLogout();return false;">অন্য অ্যাকাউন্ট?</a></div>';
