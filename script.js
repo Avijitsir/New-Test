@@ -874,15 +874,30 @@ function getLiveUser() {
     });
     return liveUserPromise;
 }
+function liveLoginMsg(t) {
+    let m = document.getElementById('liveLoginMsg');
+    if (!m) { const btn = document.getElementById('liveLoginBtn'); if (!btn) { alert(t); return; } m = document.createElement('div'); m.id = 'liveLoginMsg'; m.style.cssText = 'margin-top:8px; font-size:13px; color:#b91c1c; background:#fef2f2; border-radius:8px; padding:8px 10px;'; btn.parentNode.appendChild(m); }
+    m.innerHTML = t;
+}
 function liveLogin() {
-    try {
-        const p = new firebase.auth.GoogleAuthProvider();
-        firebase.auth().signInWithPopup(p).then(() => location.reload()).catch(e => {
-            if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) { firebase.auth().signInWithRedirect(p); return; }
-            if (e && e.code === 'auth/popup-closed-by-user') return;
-            alert('লগইন হয়নি: ' + ((e && e.message) || e));
-        });
-    } catch (e) { alert('লগইন চালু করা যায়নি। Chrome ব্রাউজারে খুলে আবার চেষ্টা করুন।'); }
+    const btn = document.getElementById('liveLoginBtn');
+    const reset = () => { if (btn) { btn.disabled = false; btn.textContent = '🔐 Google দিয়ে লগইন করুন'; } };
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ লগইন হচ্ছে...'; }
+    let p;
+    try { p = new firebase.auth.GoogleAuthProvider(); if (p.setCustomParameters) p.setCustomParameters({ prompt: 'select_account' }); }
+    catch (e) { reset(); liveLoginMsg('লগইন চালু করা যায়নি। পাতাটি রিফ্রেশ করে আবার চেষ্টা করুন।'); return; }
+    // 8 সেকেন্ডেও সাড়া না এলে বোতাম আবার খুলে দেয় (আটকে থাকবে না)
+    const guard = setTimeout(() => { reset(); liveLoginMsg('লগইন উইন্ডো সাড়া দিচ্ছে না। Chrome ব্রাউজারে (শর্টকাট নয়) পাতাটি খুলে আবার চেষ্টা করুন।'); }, 20000);
+    firebase.auth().signInWithPopup(p).then(() => { clearTimeout(guard); location.reload(); }).catch(e => {
+        clearTimeout(guard); reset();
+        const code = (e && e.code) || '';
+        if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') { liveLoginMsg('লগইন উইন্ডো বন্ধ হয়ে গেছে। আবার বোতাম চাপুন।'); return; }
+        if (code === 'auth/popup-blocked') { liveLoginMsg('ব্রাউজার লগইন উইন্ডো আটকেছে। ঠিকানার পাশের আইকন থেকে "Pop-up অনুমতি" দিয়ে আবার চাপুন।'); return; }
+        if (code === 'auth/unauthorized-domain') { liveLoginMsg('এই ওয়েবসাইটের ঠিকানা Firebase-এ অনুমোদিত নয়। অ্যাডমিন: Firebase → Authentication → Settings → Authorized domains-এ <b>avijitsir.github.io</b> যোগ করুন।'); return; }
+        if (code === 'auth/operation-not-allowed') { liveLoginMsg('Google লগইন Firebase-এ চালু করা নেই। অ্যাডমিন: Firebase → Authentication → Sign-in method → Google → Enable।'); return; }
+        if (code === 'auth/network-request-failed') { liveLoginMsg('ইন্টারনেটে সমস্যা। নেট দেখে আবার চেষ্টা করুন।'); return; }
+        liveLoginMsg('লগইন হয়নি। (কোড: ' + esc(code || (e && e.message) || 'অজানা') + ') এই কোডটি অ্যাডমিনকে জানান।');
+    });
 }
 function liveLogout() { try { firebase.auth().signOut().then(() => location.reload()); } catch (e) { location.reload(); } }
 // লাইভের ফলাফল জমা (একজন একবারই), তারপর র‍্যাংক দেখানো
