@@ -874,6 +874,14 @@ function getLiveUser() {
     });
     return liveUserPromise;
 }
+// শর্টকাট/অ্যাপ উইন্ডোতে (Chrome ট্যাব নয়) খোলা কিনা
+function isAppWindow() {
+    try { return (window.matchMedia && (window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: minimal-ui)').matches)) || window.navigator.standalone === true; } catch (e) { return false; }
+}
+function chromeLink() {
+    const u = location.href.replace(/^https?:\/\//, '');
+    return 'intent://' + u + '#Intent;scheme=https;package=com.android.chrome;end';
+}
 function liveLoginMsg(t) {
     let m = document.getElementById('liveLoginMsg');
     if (!m) { const btn = document.getElementById('liveLoginBtn'); if (!btn) { alert(t); return; } m = document.createElement('div'); m.id = 'liveLoginMsg'; m.style.cssText = 'margin-top:8px; font-size:13px; color:#b91c1c; background:#fef2f2; border-radius:8px; padding:8px 10px;'; btn.parentNode.appendChild(m); }
@@ -951,7 +959,7 @@ function liveAuthGate(box, btn, canStart) {
     btn.disabled = true;
     getLiveUser().then(u => {
         if (!u) {
-            box.insertAdjacentHTML('afterbegin', '<div class="lr-login">🔐 <b>লাইভ টেস্টে অংশ নিতে Google লগইন দরকার</b><br><small>শুধু একবার লগইন করলেই হবে। আপনার নাম র‍্যাংক তালিকায় দেখা যাবে।</small><br><button id="liveLoginBtn" onclick="liveLogin()">🔐 Google দিয়ে লগইন করুন</button></div>');
+            box.insertAdjacentHTML('afterbegin', '<div class="lr-login">🔐 <b>লাইভ টেস্টে অংশ নিতে Google লগইন দরকার</b><br><small>শুধু একবার লগইন করলেই হবে। আপনার নাম র‍্যাংক তালিকায় দেখা যাবে।</small><br><button id="liveLoginBtn" onclick="liveLogin()">🔐 Google দিয়ে লগইন করুন</button>' + (isAppWindow() ? '<div style="margin-top:10px; font-size:13px; background:#fffbeb; border-left:4px solid #f59e0b; border-radius:8px; padding:8px 10px;">⚠️ আপনি শর্টকাট/অ্যাপ উইন্ডোতে আছেন, এখানে Google লগইন অনেক সময় খোলে না।<br><b>একবার</b> নিচের বোতামে Chrome-এ খুলে লগইন করুন। তারপর এই অ্যাপে ফিরে এলে সাধারণত লগইন করাই থাকে।<br><a href="' + chromeLink() + '" style="display:inline-block; margin-top:6px; background:#2563eb; color:#fff; padding:7px 14px; border-radius:16px; text-decoration:none; font-weight:700;">🌐 Chrome-এ খুলুন</a></div>' : '') + '</div>');
             return;
         }
         const who = '<div style="font-size:13px; margin-bottom:8px;">✅ <b>' + esc(u.displayName || 'Student') + '</b> হিসেবে লগইন • <a href="#" onclick="liveLogout();return false;">অন্য অ্যাকাউন্ট?</a></div>';
