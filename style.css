@@ -211,3 +211,16 @@ body {
 /* রেজাল্ট পেজের ওপরের ফেরার তীর (স্কোর কার্ড ও সমাধান দুই জায়গাতেই থাকে) */
 .rt-back { flex: none; width: 46px; border: none; border-right: 1px solid #e5e7eb; background: #fff; color: #4361ee; font-size: 24px; font-weight: 700; line-height: 1; cursor: pointer; }
 .rt-back:active { background: #eef2ff; }
+
+/* লাইভ টেস্টের র‍্যাংক কার্ড */
+.lr-card { background: linear-gradient(135deg, #4f46e5, #9333ea); color: #fff; border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: 0 6px 16px rgba(79,70,229,.25); text-align: center; }
+.lr-rank { font-size: 34px; font-weight: 800; line-height: 1.1; }
+.lr-sub { font-size: 13px; opacity: .92; margin-top: 2px; }
+.lr-note { font-size: 12px; background: rgba(255,255,255,.18); border-radius: 8px; padding: 6px 8px; margin-top: 8px; }
+.lr-btn { margin-top: 8px; border: 0; border-radius: 18px; padding: 6px 16px; font-weight: 700; cursor: pointer; background: #fff; color: #4f46e5; }
+.lr-table { width: 100%; background: #fff; border-radius: 12px; margin-bottom: 12px; border-collapse: collapse; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+.lr-table th { background: #eef2ff; color: #4338ca; font-size: 12px; padding: 7px 8px; text-align: left; }
+.lr-table td { padding: 8px; font-size: 14px; border-top: 1px solid #f1f5f9; }
+.lr-table tr.me td { background: #fef9c3; font-weight: 800; }
+.lr-login { background: linear-gradient(135deg, #e0f2fe, #dbeafe); border-left: 5px solid #2563eb; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.lr-login button, .lr-gbtn { background: #fff; border: 1px solid #cbd5e1; border-radius: 22px; padding: 9px 18px; font-weight: 700; cursor: pointer; margin-top: 8px; font-size: 15px; }
