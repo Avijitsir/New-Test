@@ -86,9 +86,22 @@ function pdfBuild() {
     h += '<div class="ft">— ' + PDF_BRAND + ' —</div></div>';
     return h;
 }
+// অ্যাপের ভেতরের ব্রাউজার (WebView) চেনা — ওখানে প্রিন্ট/PDF খোলে না
+function pdfIsWebView() {
+    const ua = navigator.userAgent || '';
+    return /; wv\)/.test(ua) || /\bwv\b/.test(ua) || (/Android/.test(ua) && /Version\/\d+\.\d+/.test(ua) && /Chrome\//.test(ua)) || /FBAN|FBAV|Instagram|WhatsApp/i.test(ua);
+}
+function pdfCopyLink() {
+    const u = location.href;
+    try { navigator.clipboard.writeText(u).then(() => alert('লিংক কপি হয়েছে। Chrome-এর ঠিকানার ঘরে পেস্ট করে খুলুন।'), () => prompt('লিংকটি কপি করুন:', u)); } catch (e) { prompt('লিংকটি কপি করুন:', u); }
+}
 function downloadPdf() {
     if (typeof liveLocked === 'function' && liveLocked()) { alert('লাইভ টেস্ট এখনো চলছে। লাইভ শেষ হলে সমাধানসহ PDF নিতে পারবেন।'); return; }
     if (!questions || !questions.length) { alert('PDF বানানোর মতো প্রশ্ন নেই।'); return; }
+    if (pdfIsWebView()) {
+        if (confirm('এই অ্যাপের ভেতর থেকে PDF সেভ হয় না।\n\nলিংক কপি করে Chrome ব্রাউজারে খুলুন, সেখানে "📄 PDF" চাপলে সেভ হবে।\n\nএখনই লিংক কপি করবেন?')) pdfCopyLink();
+        return;
+    }
     let area = document.getElementById('pdfArea');
     if (!area) { area = document.createElement('div'); area.id = 'pdfArea'; document.body.appendChild(area); }
     area.innerHTML = pdfBuild();
@@ -96,23 +109,9 @@ function downloadPdf() {
     const waitImgs = Promise.all(imgs.map(i => new Promise(r => { i.onload = i.onerror = r; }))).then(() => {});
     const timeout = new Promise(r => setTimeout(r, 4000));
     const math = (window.MathJax && MathJax.typesetPromise) ? MathJax.typesetPromise([area]).catch(() => {}) : Promise.resolve();
-    Promise.race([Promise.all([waitImgs, math]), timeout.then(() => {})]).then(() => {
-        let printed = false;
-        const onBefore = () => { printed = true; };
-        const onAfter = () => { window.removeEventListener('beforeprint', onBefore); window.removeEventListener('afterprint', onAfter); area.innerHTML = ''; };
-        window.addEventListener('beforeprint', onBefore); window.addEventListener('afterprint', onAfter);
-        setTimeout(() => {
-            try { window.print(); } catch (e) {}
-            // প্রিন্ট উইন্ডো না খুললে (অ্যাপের ভেতরের ব্রাউজারে হয়) Chrome-এ খোলার পথ দেখায়
-            setTimeout(() => {
-                if (!printed) {
-                    window.removeEventListener('beforeprint', onBefore); window.removeEventListener('afterprint', onAfter); area.innerHTML = '';
-                    if (confirm('এই জায়গা থেকে PDF সেভ করা যাচ্ছে না।\n\nলিংক কপি করে Chrome ব্রাউজারে খুলুন, সেখানে "📄 PDF" চাপলে সেভ হবে।\n\nএখনই লিংক কপি করবেন?')) {
-                        const u = location.href;
-                        try { navigator.clipboard.writeText(u).then(() => alert('লিংক কপি হয়েছে। Chrome-এর ঠিকানার ঘরে পেস্ট করুন।'), () => prompt('লিংকটি কপি করুন:', u)); } catch (e) { prompt('লিংকটি কপি করুন:', u); }
-                    }
-                }
-            }, 1800);
-        }, 150);
+    Promise.race([Promise.all([waitImgs, math]), timeout]).then(() => {
+        // প্রিন্ট শেষ না হওয়া পর্যন্ত লেখা মুছি না (মোবাইল Chrome প্রিন্টের পর সংকেত নাও দিতে পারে, তাই পরের বারে নতুন করে বসে)
+        setTimeout(() => { try { window.print(); } catch (e) { alert('প্রিন্ট খোলা যায়নি। Chrome-এর মেনু থেকে "Share → Print" ব্যবহার করুন।'); } }, 150);
     });
+    window.addEventListener('afterprint', function onA() { window.removeEventListener('afterprint', onA); const a = document.getElementById('pdfArea'); if (a) a.innerHTML = ''; });
 }
